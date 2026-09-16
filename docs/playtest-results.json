@@ -1,0 +1,75 @@
+{
+  "test": "Studio native physics controller, own loaded avatar",
+  "date": "2026-09-16",
+  "results": {
+    "map": "Grid",
+    "finished": {
+      "Skyline": {
+        "time": 29.999953985214233,
+        "coins": 60,
+        "personalBest": true,
+        "rank": 1
+      },
+      "Neon": {
+        "time": 25.015848875045776,
+        "coins": 60,
+        "personalBest": true,
+        "rank": 1
+      },
+      "Grid": {
+        "time": 23.497792959213257,
+        "coins": 60,
+        "personalBest": true,
+        "rank": 1
+      }
+    },
+    "checked": {
+      "Skyline": true,
+      "Neon": true,
+      "Grid": true
+    },
+    "phase": "Results",
+    "resets": 2,
+    "event": "bot_complete",
+    "position": [
+      4.4,
+      26.17,
+      84.62
+    ],
+    "progress": 1,
+    "dashAccepts": 25,
+    "elapsed": 92.31
+  },
+  "reset_checks": [
+    {
+      "map": "Skyline",
+      "phase": "Racing",
+      "event": "fall_reset_result",
+      "position": [
+        3.2,
+        25.09,
+        5
+      ],
+      "resetCount": 1,
+      "timerPreserved": true,
+      "ok": true,
+      "progress": 0,
+      "elapsed": 5.75
+    },
+    {
+      "map": "Skyline",
+      "phase": "Racing",
+      "event": "manual_reset_result",
+      "position": [
+        3.2,
+        25.09,
+        5
+      ],
+      "resetCount": 2,
+      "timerPreserved": true,
+      "ok": true,
+      "progress": 0,
+      "elapsed": 8.43
+    }
+  ]
+}

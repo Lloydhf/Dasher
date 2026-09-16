@@ -1,0 +1,8 @@
+*.rbxl.lock
+*.rbxlx.lock
+__pycache__/
+*.pyc
+.DS_Store
+work/
+*.log
+Dasher-QA.rbxlx
