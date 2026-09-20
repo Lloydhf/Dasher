@@ -7,16 +7,32 @@ local RunService = game:GetService("RunService")
 local ProfileStore = {}
 ProfileStore.__index = ProfileStore
 
-local SCHEMA = 1
+local SCHEMA = 2
+local COURSE_VERSION = 2
 local LOCK_SECONDS = 180
 local MAX_COINS = 100000000
+local MAX_XP = 100000000
+local XP_PER_LEVEL = 500
+local DAILY_REWARD = 25
+local WEEKLY_TARGET = 10
+local WEEKLY_REWARD = 80
+
+local function weekKey(timestamp)
+	-- Monday 00:00 UTC; Jan 1 1970 was a Thursday.
+	return tostring(math.floor((timestamp + 3 * 86400) / (7 * 86400)))
+end
 
 local function finite(value)
 	return type(value) == "number" and value == value and math.abs(value) < math.huge
 end
 
-local function defaultData()
-	return {version = SCHEMA, coins = 0, owned = {ice = true}, equipped = "ice", best = {}}
+local function defaultData(courseVersion)
+	return {
+		version = SCHEMA, courseVersion = courseVersion or COURSE_VERSION,
+		coins = 0, owned = {ice = true}, equipped = "ice", best = {}, legacyBest = {},
+		xp = 0, dailyDay = -1,
+		weekly = {key = weekKey(os.time()), finishes = 0, score = 0, claimed = false},
+	}
 end
 
 function ProfileStore.new(config)
@@ -27,6 +43,13 @@ function ProfileStore.new(config)
 	self.sessionId = (game.JobId ~= "" and game.JobId or "studio") .. ":" .. HttpService:GenerateGUID(false)
 	self.sessionOnly = RunService:IsStudio() or game.GameId == 0
 	self.closing = false
+	self.courseVersion = config.CourseVersion or COURSE_VERSION
+	self.xpPerLevel = config.XPPerLevel or XP_PER_LEVEL
+	self.xpPerFinish = config.XPPerFinish or 100
+	self.xpWinBonus = config.XPWinBonus or 50
+	self.dailyReward = config.DailyReward or DAILY_REWARD
+	self.weeklyTarget = config.WeeklyFinishTarget or WEEKLY_TARGET
+	self.weeklyReward = config.WeeklyReward or WEEKLY_REWARD
 	for _, cosmetic in config.Cosmetics do
 		self.cosmetics[cosmetic.id] = cosmetic
 	end
@@ -47,7 +70,7 @@ function ProfileStore.new(config)
 end
 
 function ProfileStore:_sanitize(raw)
-	local data = defaultData()
+	local data = defaultData(self.courseVersion)
 	if type(raw) ~= "table" then
 		return data
 	end
@@ -64,20 +87,47 @@ function ProfileStore:_sanitize(raw)
 	if type(raw.equipped) == "string" and data.owned[raw.equipped] then
 		data.equipped = raw.equipped
 	end
+	local oldCourses = raw.courseVersion ~= self.courseVersion
 	if type(raw.best) == "table" then
 		for id in self.mapIds do
 			local time = raw.best[id]
 			if finite(time) and time > 0 and time < 3600 then
-				data.best[id] = time
+				if oldCourses then
+					data.legacyBest[id] = time
+				else
+					data.best[id] = time
+				end
 			end
 		end
+	end
+	if type(raw.legacyBest) == "table" then
+		for id in self.mapIds do
+			local time = raw.legacyBest[id]
+			if finite(time) and time > 0 and time < 3600 then
+				data.legacyBest[id] = time
+			end
+		end
+	end
+	if finite(raw.xp) then
+		data.xp = math.clamp(math.floor(raw.xp), 0, MAX_XP)
+	end
+	if finite(raw.dailyDay) then
+		data.dailyDay = math.clamp(math.floor(raw.dailyDay), -1, math.floor(os.time() / 86400))
+	end
+	if type(raw.weekly) == "table" and raw.weekly.key == data.weekly.key then
+		for _, field in {"finishes", "score"} do
+			if finite(raw.weekly[field]) then
+				data.weekly[field] = math.clamp(math.floor(raw.weekly[field]), 0, MAX_XP)
+			end
+		end
+		data.weekly.claimed = raw.weekly.claimed == true
 	end
 	return data
 end
 
 function ProfileStore:Load(player)
 	local record = {
-		data = defaultData(), status = "loading", writable = false,
+		data = defaultData(self.courseVersion), status = "loading", writable = false,
 		busy = true, ready = false, closing = false, revision = 0,
 		lockId = self.sessionId .. ":" .. HttpService:GenerateGUID(false),
 	}
@@ -95,7 +145,7 @@ function ProfileStore:Load(player)
 		local ok, result = pcall(function()
 			return self.store:UpdateAsync(key, function(old)
 				-- An unknown schema is left untouched rather than replaced by defaults.
-				if old ~= nil and (type(old) ~= "table" or old.version ~= SCHEMA) then
+				if old ~= nil and (type(old) ~= "table" or (old.version ~= 1 and old.version ~= SCHEMA)) then
 					unsupported = true
 					return nil
 				end
@@ -203,6 +253,78 @@ function ProfileStore:SetBest(player, mapId, seconds)
 	return false
 end
 
+function ProfileStore:_currentWeek(record)
+	local key = weekKey(os.time())
+	if record.data.weekly.key ~= key then
+		record.data.weekly = {key = key, finishes = 0, score = 0, claimed = false}
+		record.revision += 1
+	end
+	return record.data.weekly
+end
+
+function ProfileStore:GetProgression(player)
+	local record = self.records[player]
+	if not record or not record.ready then
+		return nil
+	end
+	local weekly = self:_currentWeek(record)
+	local xp = record.data.xp
+	local perLevel = self.xpPerLevel
+	return {
+		xp = xp, level = 1 + math.floor(xp / perLevel), xpIntoLevel = xp % perLevel,
+		xpPerLevel = perLevel, xpToNext = perLevel - xp % perLevel,
+		dailyAvailable = record.data.dailyDay < math.floor(os.time() / 86400), dailyReward = self.dailyReward,
+		weeklyProgress = weekly.finishes, weeklyTarget = self.weeklyTarget, weeklyClaimed = weekly.claimed,
+		weeklyReward = self.weeklyReward, weeklyKey = weekly.key, weeklyScore = weekly.score,
+	}
+end
+
+function ProfileStore:RecordFinish(player, rank)
+	local record = self.records[player]
+	if not self:IsReady(player) then
+		return 0
+	end
+	local gained = self.xpPerFinish + (rank == 1 and self.xpWinBonus or 0)
+	local weekly = self:_currentWeek(record)
+	weekly.finishes = math.min(MAX_XP, weekly.finishes + 1)
+	weekly.score = math.min(MAX_XP, weekly.score + gained)
+	record.data.xp = math.min(MAX_XP, record.data.xp + gained)
+	record.revision += 1
+	return gained
+end
+
+function ProfileStore:ClaimDaily(player)
+	local record = self.records[player]
+	if not self:IsReady(player) then
+		return false, "Progress is still loading."
+	end
+	local day = math.floor(os.time() / 86400)
+	if record.data.dailyDay >= day then
+		return false, "Today's reward has already been claimed."
+	end
+	-- Mark and credit without a yield so simultaneous requests cannot double claim.
+	record.data.dailyDay = day
+	self:AddCoins(player, self.dailyReward)
+	return true, "+" .. self.dailyReward .. " coins. Come back tomorrow UTC!"
+end
+
+function ProfileStore:ClaimWeekly(player)
+	local record = self.records[player]
+	if not self:IsReady(player) then
+		return false, "Progress is still loading."
+	end
+	local weekly = self:_currentWeek(record)
+	if weekly.claimed then
+		return false, "This week's reward has already been claimed."
+	end
+	if weekly.finishes < self.weeklyTarget then
+		return false, "Finish " .. self.weeklyTarget .. " races this week to claim this reward."
+	end
+	weekly.claimed = true
+	self:AddCoins(player, self.weeklyReward)
+	return true, "+" .. self.weeklyReward .. " coins. Weekly challenge complete!"
+end
+
 function ProfileStore:Save(player, release)
 	local record = self.records[player]
 	if not record or not record.ready or not record.writable or record.busy then
@@ -247,6 +369,10 @@ function ProfileStore:Save(player, release)
 		record.writable = false
 	end
 	record.busy = false
+	if succeeded and self.OnSaved then
+		-- Consumers get the exact committed weekly total, never a newer unsaved value.
+		self.OnSaved(player, table.clone(snapshot.weekly))
+	end
 	if not succeeded then
 		warn("[Dasher] Could not save " .. player.UserId .. (lostLock and " (session ownership changed)." or ". Will retry on the next save."))
 	end

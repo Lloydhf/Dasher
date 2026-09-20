@@ -1,48 +1,46 @@
-# DASHER
+# DASHER · NEXT 0.2
 
-**One dash. Three worlds. Back to the start.**
+**Find your line. Save your dash. Finish together.**
 
-A round-based Roblox parkour racer by Kuzey. Players keep their own avatars and race through three handcrafted courses. Every fall returns to the start: timing and clean landings matter.
+A competitive Roblox parkour racer directed by Kuzey, with implementation assistance from OpenAI Codex. Five long courses, a new social atrium, map voting, spectator cameras and cosmetic progression. Falls return to the start; there are no checkpoints.
 
-## Open the game
+## Play
 
-1. Download and extract **Dasher-Studio.zip** from this repository, then open **Dasher.rbxlx** in Roblox Studio (`File > Open from File`). If you already have the local project folder, open its **Dasher.rbxlx** directly.
-2. Press **Play / F5**. A short intermission leads into the first race.
-3. The three courses rotate automatically: **Cloudline → Afterhours → The Grid**.
+Download and extract **[Dasher-Studio.zip](Dasher-Studio.zip)**. Open the included **Dasher.rbxlx** in Roblox Studio with **File → Open from File**, then press **F5 / Play**. Alternatively, rebuild the place from this repository with `python tools/build.py`. The map is selected after a 20-second voting intermission. A round lasts up to six minutes. The first finisher may accelerate the shared countdown; individual times stay in real seconds.
 
-The place embeds all scripts and map geometry. **No plugins, HTTP requests, paid assets or API keys are needed to play locally.** The `.rbxlx` extension is Roblox's editable XML place format; Studio can save it as `.rbxl` if preferred.
+The editable place includes all source and geometry. No plugins, API keys, HTTP access or paid assets are required. Dasher-Studio.zip contains this release place and the Turkish quick-start guide. Test places are deliberately outside the release folder.
 
-## The courses
+## This iteration
 
-| Course | Setting | Focus |
-| --- | --- | --- |
-| Cloudline | Sunlit suspended architecture, cloud forms and side walls | Clear landings, lateral routes, dash distance |
-| Afterhours | A neon city alley above a dangerous street | Precise ledges and rhythm |
-| The Grid | A four-wall geometric obstacle chamber | Exposed timing and clean execution |
+- Charcoal atrium with cyan accents, seating, four interactive kiosks and a short camera introduction.
+- Small gameplay HUD, one menu launcher, animated panels and spectator controls.
+- **Cloudline, Afterhours, The Grid, Foundry and Zenith**: 74 main-route platforms and optional dash forks per course; 24 ordered validation gates.
+- One dash recharges in **3.8 seconds**. Ordinary jumps complete the main route; forks reward dash timing.
+- Finish reward **14 coins**, plus podium bonuses **6 / 3 / 1**. Ten purely visual trail styles, including the starter trail.
+- Three-choice voting. Finishers can watch racers; voluntarily spectating an unfinished run forfeits that round.
+- XP and levels, a claimable **25-coin daily reward**, and a weekly **10 finishes → 80 coins** objective. No missed-day penalty.
+- Weekly ranking based on race results, stored separately for each UTC week.
 
-Rounds last four minutes. The first finisher can accelerate the shared countdown once. Personal run times always use real elapsed time. Finishing earns coins once per round, with a small podium bonus. Coins unlock visual trails only; no trail changes speed, cooldown or jumping.
+## Deliberately deferred
 
-## Local progress versus published progress
+Team races, additional movement skills, a season pass, stage skips and Robux sales are not active. Monetization configuration is disabled with zero product IDs. The shop accepts earned coins only. Next priorities depend on first-course completion, repeat attempts, camera comfort, mobile performance and map preference.
 
-Studio sessions use **temporary coins and records** deliberately. Closing Play resets them. This protects real player data during development. Published servers use `DataStoreService` with session ownership, serialized updates and autosaves. If a profile cannot be loaded, that session cannot overwrite the saved profile. See `docs/TESTING.md` for release checks and limitations.
+Before adding developer products, implement and test server-side receipts, duplicate-receipt protection and durable grants. A purchase prompt alone is not fulfilment. Keep competitive movement independent of purchases.
 
-## Source layout
+## Saved progress
 
-```
-src/shared/Config.luau                 movement and presentation tuning
-src/server/DasherServer.server.luau    rounds, validation, rewards
-src/server/ProfileStore.luau          persistence and cosmetic transactions
-src/client/DasherClient.client.luau    responsive UI, input, movement feedback
-tools/world.py                        deterministic editable map geometry
-tools/build.py                        standalone place builder (Python stdlib)
-tools/StudioQA.server.luau             isolated Studio test harness
-docs/                                design decisions and verification notes
-```
+Studio uses temporary data even when API access is enabled. Published servers use the existing DasherProfiles_v1 store with schema migration, session locks and serialized updates. Existing coins and owned trails remain. Old short-course times are archived separately because routes are no longer comparable. Failed reads cannot replace saved progress with defaults.
 
-Rebuild after source changes with `python tools/build.py`. Build an isolated accelerated test place with `python tools/build.py --qa --output Dasher-QA.rbxlx`. The test harness is **not included** in the normal release place.
+The weekly leaderboard uses memory in Studio and an ordered data store in published servers. Live cross-server persistence needs a controlled published test. See [verification notes](docs/TESTING.md).
 
-## Authorship and portfolio
+## Source and iteration
 
-Concept, direction and final playtesting: **Kuzey**. Implementation assistance: **OpenAI Codex**. Keep before/after recordings and player observations in the design journal. Only claim work and tests actually performed. This game is a portfolio project; it does not replace any university's individual admission assignment.
+src/shared/Config.luau controls balance. src/server owns rounds, voting, progression and ranking. src/client owns input, UI and cameras. tools/world.py generates editable parts; python tools/build.py embeds them in the place. No unreviewed Toolbox scripts are included.
 
-All geometry and UI are constructed for this project. No third-party map packs or executable Toolbox models are included. Built-in Roblox resources remain subject to Roblox's terms. No open-source license has been granted for this repository yet.
+See [design and research](docs/NEXT-DESIGN.md), [map specification](docs/MAP-DESIGN.md), and [testing](docs/TESTING.md). Rebuild after source changes. Never upload files named QA or LOCAL_TEST_ONLY.
+
+For a portfolio introduction, read the [case study](docs/PORTFOLIO.md). A separate [onboarding research proposal](https://github.com/Lloydhf/game-design-research) asks when to present movement instructions; its A/B variants and participant study have not yet been implemented.
+
+Publication verification on 20 September 2026 rebuilt the place, checked all six embedded source files and 6,122 unique instance references, and excluded the StudioQA script from the normal place. Earlier Studio results remain dated in the verification notes; Studio gameplay was not rerun during publication.
+
+Geometry and UI were constructed for this project. Roblox built-in resources remain subject to Roblox terms. This repository does not currently grant an open-source license.

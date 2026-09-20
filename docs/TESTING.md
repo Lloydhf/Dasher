@@ -1,32 +1,37 @@
-# Verification — 2026-09-16
+# Dasher 0.2 verification — 17 September 2026
 
-Tested with the installed Roblox Studio 0.739 on Windows. This is a playable first release, not a claim of exhaustive QA or commercial readiness.
+## Executed
 
-## Passed in Studio
+- All six production Luau sources compile with the official Luau compiler.
+- 34 release checks cover embedded-source parity, unique instance references, five map contracts, 24 gates and 74 primary platforms per map, disabled commerce, and absence of QA code in the release.
+- 33 standalone server assertions cover schema migration, session locking, failed reads, duplicate claims, UTC rollover, concurrent-save snapshots, ordered ranking updates and voting.
+- Roblox Studio ran 551 structure/progression/voting assertions successfully.
+- A Studio client physically traversed all five main routes using normal Humanoid movement and ordinary jumps. No teleports, health edits or server bypasses were used by the traversal bot. All five finishes were verified and rewarded by the normal server code.
 
-- All five scripts in the isolated test place compiled with Studio's Luau compiler.
-- 25 assertions passed for profile defaults, finite rewards, insufficient funds, unknown/unowned cosmetics, single debit, equip, improving records, cleanup and map structure.
-- Accelerated rounds reached Skyline, Neon and Grid in order.
-- A test controller drove the user's loaded avatar through **all 26 primary platforms on each map**, using real Humanoid walking/jumping and the production Dash input function. It never teleported the character or assigned velocity to pass a course.
-- The server accepted all three finishes, including all eight ordered gates, and awarded 60 coins per finish. Test run times: Cloudline 30.00 s (includes intentional restarts), Afterhours 25.02 s, The Grid 23.50 s. These are automated feasibility checks, not representative player completion times.
-- 25 predicted Dash actions were confirmed by the server. Main 14-stud gaps were crossed and landed on physically.
-- Walking off the launch deck returned the player to the start. R/restart did the same. Both preserved the run's start timestamp and reset progress.
-- The in-game trail shop was opened through the UI. Buying SOLAR reduced the test balance from 180 to 60 and equipped it.
-- Cloud, night-city and classic-block scenes, the HUD and trail shop were visually inspected at an approximately 812×677 Studio viewport. Default player-list overlap and low-contrast hint text were corrected.
+| Route | Verified time | Coins | XP |
+| --- | ---: | ---: | ---: |
+| Cloudline | 78.80 s | 20 | 150 |
+| The Grid | 77.00 s | 20 | 150 |
+| Foundry | 72.70 s | 20 | 150 |
+| Zenith | 72.90 s | 20 | 150 |
+| Afterhours | 73.88 s | 20 | 150 |
 
-## Not yet verified
+These are automated experienced-route timings, not an estimate for first-time players. Cloudline includes deliberate fall and manual reset checks. Both reset progress while retaining the original race clock. A repeated dash attempt was blocked during cooldown.
 
-- Multiple simultaneous clients, real network latency, late join/leave edge cases, and the first-finisher acceleration button under live competition.
-- Persistent saves in a published experience, reconnect/session-lock contention and Roblox service outages. Studio deliberately uses memory-only profiles.
-- Physical mobile/gamepad input, broad device performance, unusually sized avatar packages and every optional shortcut.
-- Human difficulty/fun testing. Tune from player observations rather than treating the automated timings as balance targets.
+Menu, shop and quest presentation were inspected in Studio. Claiming the daily reward through the actual GUI raised the test balance by 25. The normal race HUD leaves most of the viewport clear; voluntarily opened menus and voting occupy more space. Physical phones/controllers have not been tested.
 
-No runtime error in the game's scripts was observed during the completed tests. Studio emitted unrelated online-service/avatar-mesh warnings; these were not counted as successful game checks. Movement validation reduces common invalid movement; it is not a promise to prevent every exploit.
+## Multiplayer integration
 
-## Reproduce
+Two Studio clients and a local server were used to exercise spectating, forfeiture, menus and optional dash forks. The first run found that an immediate spectate exit could be dropped by the action throttle. The server exit path was corrected, eight targeted regression assertions passed, and the two-client rerun passed all 16 integration assertions. These include immediate exit, correct camera subject, no forfeiture bypass, one daily grant, all ten shop entries, menu closure, results camera recovery and eligibility in the next round. Four optional dash forks were physically traversed in Zenith; the normal server verified the finish in 68.43 seconds. The same geometry pattern is used by the other maps; their optional forks were checked geometrically but not all individually traversed.
 
-`python tools/build.py --qa --output Dasher-QA.rbxlx` embeds the structure/economy harness and short rounds. Open that file and press Play; inspect Output for `[DASHER_QA]`.
+## Live limitations
 
-The additional physical-play controller used during development is separate from the distributable game. The normal build contains four production scripts and no test bot, shortened rounds, artificial starting balance or QA remotes.
+Studio deliberately stores temporary data, including the weekly board. Real Roblox data-store migration, cross-server ranking updates, reconnect behavior and live network/device performance still need a controlled published test. No Robux products are enabled and no payment was tested. Team races and seasonal releases are future iterations.
 
-Before opening the experience to the public, run a small friend playtest with at least two clients and a phone, and verify save/rejoin in the published private experience.
+Player testing should cover early difficulty, whether a fall near the end feels fair, voluntary replay, motion comfort, touch controls, slow devices and simultaneous finish/disconnect cases. No retention or revenue improvement is claimed from these local tests.
+
+## Isolation
+
+Disposable test places live outside the release directory and all bot/test code is guarded by IsStudio. The normal place excludes StudioQA and traversal appendages. Do not publish a file named QA or LOCAL_TEST_ONLY. Open and publish the release Dasher.rbxlx only after reviewing it.
+
+Prior v0.1 documents are archived under history-v0.1 and are not evidence for this version.

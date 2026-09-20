@@ -1,16 +1,18 @@
-# Dasher'ı oyna
+# Dasher Next · 0.2
 
-1. `Dasher.rbxlx` dosyasını Roblox Studio ile aç.
-2. **Play / F5** düğmesine bas. Tur arası ve geri sayımın ardından yarış başlar.
-3. **WASD:** hareket, **Space:** zıplama, **Q veya sol Shift:** dash, **R:** başa dönme.
-4. **TRAILS** menüsünde coin'lerle görsel izler açılır. **HELP** kontrolleri, **SETUP** hareket efektleri ve ses seçeneklerini gösterir.
+1. ZIP içindeysen önce dosyaları çıkar.
+2. Roblox Studio → **File → Open from File** ile bu klasördeki **Dasher.rbxlx** dosyasını aç.
+3. **F5 / Play** tuşuna bas. Lobi ve menüler oyun çalışınca etkinleşir.
+4. Tur arasında üç haritadan birine oy ver. Sayaç bitince seçilen parkura geçersin.
 
-Bulut → neon gece sokağı → klasik blok odası sırasıyla oynanır. Düşüşte en başa dönersin; kişisel kronometre çalışmaya devam eder. Dash'e havadayken de basabilirsin. Uzun boşluklarda zıpla, ileri yön ver ve dash kullan.
+Eski masaüstü Dasher.rbxl dosyası boş başlangıç dosyası olabilir. Yeni sürümün doğru dosyası bu klasördeki **Dasher.rbxlx** dosyasıdır. .rbxlx, Studio'nun açabildiği düzenlenebilir oyun formatıdır.
 
-Her tur dört dakika sürer. Herkes bitirince tur erken sona erer. İlk bitiren oyuncu, başkaları yarışırken ortak saati bir kez 1,5 kat hızlandırabilir. Kazandığın coin'ler yalnız kozmetik içindir.
+**Kontroller:** WASD hareket, Space zıplama, Q veya Shift dash. Dash 3,8 saniyede dolar. R ile başa dönülür; yarış süren sıfırlanmaz. Mobil ve gamepad kontrolleri de bulunur. Menüde hareket efektlerini azaltabilirsin.
 
-Studio'daki coin ve rekorlar test oturumuna aittir; Play'i kapatınca sıfırlanır. Canlı oyundaki kayıt sistemi ayrı çalışır. Bu dosyayı açmak için eklenti veya API anahtarı gerekmez.
+**Yeni içerik:** Beş uzun rota, modern lobi, harita oylaması, spectate, günlük/haftalık hedefler, seviye ve 10 trail görünümü. Bitiriş 14 coin; ilk üç için ek 6/3/1 coin. Mağazadaki ürünler yalnızca görseldir.
 
-Haritalar `ServerStorage > Maps` altında düzenlenebilir. Play sırasında aktif kopya `Workspace > ActiveMap` içinde görünür. Kalıcı harita değişikliklerini Play durduktan sonra asıl şablonda yap.
+Studio'daki para, seviye ve kayıtlar test içindir; Play kapanınca sıfırlanır. Canlı oyuncu kayıtları yayımlanan oyun sunucusunda saklanır.
 
-Masaüstündeki ilk `Dasher.rbxl` dosyan korunmuştur. Buradaki yeni dosya oyunun hazırlanmış sürümüdür. Gerçek oyunculara açmadan önce arkadaşlarınla çok oyunculu ve telefon denemesi yapılmalıdır; test kapsamı `docs/TESTING.md` içinde yazılıdır.
+Bu sürüm henüz canlı oyununun üzerine yayımlanmadı. Önce yerel olarak dene; yayımlarken Studio'daki oyun adını ve hedef deneyimi kontrol ederek bu **Dasher.rbxlx** dosyasını kullan. QA/test dosyasını yayımlama.
+
+Gerçek Robux satışları ve takım yarışları bu iterasyonda açık değil. Deneme sonuçlarına göre sonraki sürümde ele alınacak.

@@ -1,7 +1,4 @@
--- Dasher client: presentation and prediction only. Rewards, runs and saves belong to the server.
--- Motor6D overlays are applied in PreSimulation, after the Animator, and removed before its next step.
--- Dash uses a planar LinearVelocity so gravity and jumping remain part of the parkour.
-
+-- Dasher 0.2: compact presentation; rewards and eligibility are server authoritative.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -11,382 +8,345 @@ local ContextActionService = game:GetService("ContextActionService")
 local SoundService = game:GetService("SoundService")
 local GuiService = game:GetService("GuiService")
 local StarterGui = game:GetService("StarterGui")
-
 local player = Players.LocalPlayer
--- The game owns its finish-order UI; the default player list otherwise overlaps the coin pill.
--- CoreGui can initialize after this script, so retry briefly without delaying the HUD.
-task.spawn(function()
-	for _ = 1, 8 do
-		local ok = pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false) end)
-		if ok then return end
-		task.wait(0.25)
-	end
-end)
 local package = ReplicatedStorage:WaitForChild("Dasher")
 local Config = require(package:WaitForChild("Config"))
 local remotes = package:WaitForChild("Remotes")
-local Action = remotes:WaitForChild("Action")
-local State = remotes:WaitForChild("State")
-local Feedback = remotes:WaitForChild("Feedback")
-local DashFX = remotes:WaitForChild("DashFX")
-
-local C = {
-	ink = Color3.fromRGB(12, 18, 31), panel = Color3.fromRGB(20, 29, 46),
-	card = Color3.fromRGB(30, 42, 61), border = Color3.fromRGB(68, 89, 111),
-	text = Color3.fromRGB(246, 244, 233), muted = Color3.fromRGB(174, 190, 205),
-	cyan = Color3.fromRGB(90, 230, 239), gold = Color3.fromRGB(255, 208, 105),
-	red = Color3.fromRGB(255, 127, 136), green = Color3.fromRGB(147, 235, 184),
-}
-local snapshot = {phase = "Waiting", coins = 0, owned = {ice = true}, equipped = "ice", progress = 0, finishers = {}}
+local Action, State, Feedback, DashFX = remotes:WaitForChild("Action"), remotes:WaitForChild("State"), remotes:WaitForChild("Feedback"), remotes:WaitForChild("DashFX")
+local C = {ink=Color3.fromRGB(13,16,22), panel=Color3.fromRGB(23,28,36), card=Color3.fromRGB(33,40,49), border=Color3.fromRGB(70,86,99), text=Color3.fromRGB(242,242,233), muted=Color3.fromRGB(168,184,195), cyan=Color3.fromRGB(96,230,221), gold=Color3.fromRGB(247,202,113), red=Color3.fromRGB(250,129,138), green=Color3.fromRGB(147,235,184)}
+local regularFont = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Medium)
+local strongFont = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Bold)
+local snapshot = {phase="Waiting",coins=0,owned={ice=true},equipped="ice",progress=0,finishers={},racers={}}
 local receivedAt = os.clock()
-local reducedMotion = false
-local muted = false
-local menuOpen = false
-local menuPage = "Help"
-local localDashAt = -100
-local activeDash = nil
-local lastRestartAt = -100
-local effects = {}
-local lastFinished = nil
-local toastSerial = 0
-local cameraKick = 0
-local cameraOffsetApplied = 0
-local lastCamera = nil
-local shopButtons = {}
-local connections = {}
-local characterConnections = {}
-local closedResultsRound = nil
-
-local function make(className, parent, props)
-	local instance = Instance.new(className)
-	for key, value in pairs(props or {}) do instance[key] = value end
-	instance.Parent = parent
-	return instance
+local reducedMotion, muted, menuOpen = false, false, false
+local menuPage = "Home"
+local localDashAt, lastRestartAt = -100, -100
+local activeDash, lastFinished, lastCamera = nil, nil, nil
+local cinematic, spectateTarget = nil, nil
+local introPlayed = false
+local cameraKick, cameraOffsetApplied, toastSerial, menuSerial = 0, 0, 0, 0
+local effects, connections, characterConnections, shopButtons, questControls, voteButtons = {}, {}, {}, {}, {}, {}
+local ui = {}
+local openMenu, closeMenu, restoreCamera, setSpectate, renderVotes
+local function make(className,parent,props)
+ local item=Instance.new(className)
+ for key,value in pairs(props or {}) do item[key]=value end
+ item.Parent=parent return item
 end
-
-local function round(parent, radius)
-	return make("UICorner", parent, {CornerRadius = UDim.new(0, radius or 12)})
+local function round(parent,radius) return make("UICorner",parent,{CornerRadius=UDim.new(0,radius or 12)}) end
+local function stroke(parent,color,transparency) return make("UIStroke",parent,{Color=color or C.border,Transparency=transparency or 0.55,Thickness=1}) end
+local function panel(parent,name,size,position,color)
+ local item=make("Frame",parent,{Name=name,Size=size,Position=position,BackgroundColor3=color or C.ink,BackgroundTransparency=0.06,BorderSizePixel=0})
+ round(item,12) stroke(item) return item
 end
-
-local function stroke(parent, color, transparency)
-	return make("UIStroke", parent, {Color = color or C.border, Transparency = transparency or 0.55, Thickness = 1})
+local function label(parent,text,size,position,textSize,color,bold)
+ return make("TextLabel",parent,{BackgroundTransparency=1,BorderSizePixel=0,Size=size,Position=position,Text=text,TextSize=textSize or 16,TextColor3=color or C.text,FontFace=bold and strongFont or regularFont,TextXAlignment=Enum.TextXAlignment.Left,TextYAlignment=Enum.TextYAlignment.Center,TextTruncate=Enum.TextTruncate.AtEnd})
 end
-
-local function panel(parent, name, size, position, color)
-	local item = make("Frame", parent, {Name = name, Size = size, Position = position, BackgroundColor3 = color or C.ink, BackgroundTransparency = 0.07, BorderSizePixel = 0})
-	round(item, 14)
-	stroke(item)
-	return item
+local function center(item) item.TextXAlignment=Enum.TextXAlignment.Center return item end
+local function button(parent,text,size,position,color)
+ local item=make("TextButton",parent,{Size=size,Position=position,Text=text,TextSize=16,FontFace=strongFont,TextColor3=color and C.ink or C.text,BackgroundColor3=color or C.panel,BorderSizePixel=0,AutoButtonColor=false,Selectable=true})
+ round(item,9) local outline=stroke(item,color or C.border,color and 0.8 or 0.45)
+ local function hover(active)
+  if not item.Parent then return end
+  TweenService:Create(outline,TweenInfo.new(reducedMotion and 0 or 0.13),{Transparency=active and 0.08 or 0.6}):Play()
+ end
+ item.MouseEnter:Connect(function() hover(true) end) item.MouseLeave:Connect(function() hover(false) end)
+ item.SelectionGained:Connect(function() hover(true) end) item.SelectionLost:Connect(function() hover(false) end)
+ return item
 end
-
-local function label(parent, text, size, position, textSize, color, bold)
-	return make("TextLabel", parent, {
-		BackgroundTransparency = 1, BorderSizePixel = 0, Size = size, Position = position,
-		Text = text, TextSize = textSize or 14, TextColor3 = color or C.text,
-		Font = bold and Enum.Font.GothamBold or Enum.Font.Gotham,
-		TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Center,
-		TextTruncate = Enum.TextTruncate.AtEnd,
-	})
+local function wrap(item) item.TextWrapped=true item.TextTruncate=Enum.TextTruncate.None return item end
+local function timeText(seconds,precise)
+ seconds=math.max(0,tonumber(seconds) or 0)
+ return precise and string.format("%02d:%05.2f",math.floor(seconds/60),seconds%60) or string.format("%02d:%02d",math.floor(seconds/60),math.floor(seconds%60))
 end
-
-local function button(parent, text, size, position, color)
-	local item = make("TextButton", parent, {
-		Size = size, Position = position, Text = text, TextSize = 12, Font = Enum.Font.GothamBold,
-		TextColor3 = color and C.ink or C.text, BackgroundColor3 = color or C.panel,
-		BorderSizePixel = 0, AutoButtonColor = true, Selectable = true,
-	})
-	round(item, 10)
-	stroke(item, color or C.border, color and 0.8 or 0.45)
-	return item
-end
-
-local function center(item)
-	item.TextXAlignment = Enum.TextXAlignment.Center
-	return item
-end
-
-local function timeText(seconds, precise)
-	seconds = math.max(0, tonumber(seconds) or 0)
-	local minutes = math.floor(seconds / 60)
-	if precise then return string.format("%02d:%05.2f", minutes, seconds % 60) end
-	return string.format("%02d:%02d", minutes, math.floor(seconds % 60))
-end
-
 local function coinText(amount)
-	local text = tostring(math.floor(tonumber(amount) or 0))
-	local formatted = text:reverse():gsub("(%d%d%d)", "%1,"):reverse()
-	return formatted:gsub("^,", "")
+ local value=tostring(math.floor(tonumber(amount) or 0)):reverse():gsub("(%d%d%d)","%1,"):reverse()
+ return (value:gsub("^,",""))
 end
-
 local function trailColor(id)
-	for _, cosmetic in ipairs(Config.Cosmetics) do
-		if cosmetic.id == id then return cosmetic.color end
-	end
-	return C.cyan
+ for _,item in ipairs(Config.Cosmetics) do if item.id==id then return item.color end end return C.cyan
 end
-
-local gui = make("ScreenGui", player:WaitForChild("PlayerGui"), {
-	Name = "DasherHUD", ResetOnSpawn = false, IgnoreGuiInset = false,
-	ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 20,
-})
-local root = make("Frame", gui, {Name = "SafeCanvas", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1})
-
-local identity = panel(root, "Identity", UDim2.fromOffset(224, 78), UDim2.fromOffset(20, 18))
-local slash = make("Frame", identity, {Size = UDim2.fromOffset(5, 24), Position = UDim2.fromOffset(19, 16), BackgroundColor3 = C.cyan, BorderSizePixel = 0, Rotation = 20})
-round(slash, 2)
-label(identity, "DASHER", UDim2.new(1, -57, 0, 28), UDim2.fromOffset(37, 12), 23, C.text, true)
-local mapLabel = label(identity, "ENTER THE RACE", UDim2.new(1, -34, 0, 18), UDim2.fromOffset(17, 49), 10, C.muted, true)
-
-local timerPanel = panel(root, "RoundClock", UDim2.fromOffset(180, 86), UDim2.new(0.5, -90, 0, 18))
-local phaseLabel = center(label(timerPanel, "GETTING READY", UDim2.new(1, -12, 0, 16), UDim2.fromOffset(6, 8), 10, C.muted, true))
-local clockLabel = center(label(timerPanel, "--:--", UDim2.new(1, -12, 0, 35), UDim2.fromOffset(6, 25), 30, C.text, true))
-local multiplierLabel = center(label(timerPanel, "ROUND TIME", UDim2.new(1, -12, 0, 15), UDim2.fromOffset(6, 64), 9, C.muted, true))
-
-local coinPanel = panel(root, "CoinBalance", UDim2.fromOffset(164, 56), UDim2.new(1, -184, 0, 18))
-local coinCircle = make("Frame", coinPanel, {Size = UDim2.fromOffset(28, 28), Position = UDim2.fromOffset(13, 14), BackgroundColor3 = C.gold, BorderSizePixel = 0})
-round(coinCircle, 50)
-local coinInset = make("Frame", coinCircle, {Size = UDim2.fromOffset(20, 20), Position = UDim2.fromOffset(4, 4), BackgroundColor3 = C.gold, BorderSizePixel = 0})
-round(coinInset, 50)
-stroke(coinInset, C.ink, 0.45)
-make("Frame", coinInset, {Size = UDim2.fromOffset(3, 12), Position = UDim2.fromOffset(9, 4), BackgroundColor3 = C.ink, BackgroundTransparency = 0.22, BorderSizePixel = 0, Rotation = 22})
-local balanceLabel = label(coinPanel, "0", UDim2.new(1, -58, 0, 24), UDim2.fromOffset(51, 8), 20, C.text, true)
-local saveLabel = label(coinPanel, "COINS", UDim2.new(1, -58, 0, 15), UDim2.fromOffset(51, 32), 9, C.muted, true)
-
-local topActions = make("Frame", root, {Size = UDim2.fromOffset(220, 34), Position = UDim2.new(1, -240, 0, 84), BackgroundTransparency = 1})
-local trailsButton = button(topActions, "TRAILS", UDim2.fromOffset(78, 34), UDim2.fromOffset(0, 0))
-local helpButton = button(topActions, "HELP", UDim2.fromOffset(62, 34), UDim2.fromOffset(85, 0))
-local setupButton = button(topActions, "SETUP", UDim2.fromOffset(66, 34), UDim2.fromOffset(154, 0))
-local restartButton = button(root, "RESTART  [R]", UDim2.fromOffset(132, 34), UDim2.fromOffset(20, 108))
-
-local progressPanel = panel(root, "Progress", UDim2.fromOffset(330, 48), UDim2.new(0.5, -165, 1, -145))
-local runLabel = label(progressPanel, "YOUR RUN  --:--", UDim2.fromOffset(197, 18), UDim2.fromOffset(14, 7), 10, C.muted, true)
-local progressLabel = label(progressPanel, "0%", UDim2.fromOffset(62, 18), UDim2.new(1, -76, 0, 7), 10, C.cyan, true)
-progressLabel.TextXAlignment = Enum.TextXAlignment.Right
-local progressTrack = make("Frame", progressPanel, {Size = UDim2.new(1, -28, 0, 4), Position = UDim2.fromOffset(14, 31), BackgroundColor3 = C.card, BorderSizePixel = 0})
-round(progressTrack, 4)
-local progressFill = make("Frame", progressTrack, {Size = UDim2.fromScale(0, 1), BackgroundColor3 = C.cyan, BorderSizePixel = 0})
-round(progressFill, 4)
-
-local dashPanel = panel(root, "DashReadiness", UDim2.fromOffset(280, 70), UDim2.new(0.5, -140, 1, -85))
-local dashTitle = label(dashPanel, "DASH", UDim2.fromOffset(116, 24), UDim2.fromOffset(16, 9), 17, C.text, true)
-local dashKey = label(dashPanel, "Q / SHIFT", UDim2.fromOffset(110, 22), UDim2.new(1, -126, 0, 10), 10, C.muted, true)
-dashKey.TextXAlignment = Enum.TextXAlignment.Right
-local dashTrack = make("Frame", dashPanel, {Size = UDim2.new(1, -32, 0, 5), Position = UDim2.fromOffset(16, 41), BackgroundColor3 = C.card, BorderSizePixel = 0})
-round(dashTrack, 5)
-local dashFill = make("Frame", dashTrack, {Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.cyan, BorderSizePixel = 0})
-round(dashFill, 5)
-local dashCaption = center(label(dashPanel, "READY", UDim2.new(1, -20, 0, 14), UDim2.fromOffset(10, 49), 9, C.muted, true))
-
-local touchDash = button(root, "DASH", UDim2.fromOffset(88, 70), UDim2.new(1, -108, 1, -206), C.cyan)
-touchDash.TextSize = 16
-touchDash.Visible = UserInputService.TouchEnabled
-local tip = center(label(root, "JUMP + DASH ACROSS GAPS  /  EVERY FALL RESTARTS THE COURSE", UDim2.fromOffset(580, 24), UDim2.new(0.5, -290, 1, -177), 10, C.text, true))
-tip.BackgroundColor3 = C.ink
-tip.BackgroundTransparency = 0.14
-round(tip, 8)
-
-local accelerateButton = button(root, "SPEED UP ROUND  1.5x", UDim2.fromOffset(236, 42), UDim2.new(0.5, -118, 0, 126), C.gold)
-accelerateButton.Visible = false
-
-local countdown = center(label(root, "", UDim2.fromOffset(420, 100), UDim2.new(0.5, -210, 0.32, -50), 68, C.text, true))
-countdown.Visible = false
-stroke(countdown, C.ink, 0.3)
-local toast = panel(root, "Toast", UDim2.fromOffset(470, 48), UDim2.new(0.5, -235, 0, 184))
-toast.Visible = false
-local toastText = center(label(toast, "", UDim2.new(1, -28, 1, -8), UDim2.fromOffset(14, 4), 13, C.text, true))
-toastText.TextWrapped = true
-toastText.TextTruncate = Enum.TextTruncate.None
-
--- Modals use a scroll area so their controls remain reachable on small displays.
-local scrim = make("TextButton", root, {Name = "ModalScrim", Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.3, BorderSizePixel = 0, Text = "", AutoButtonColor = false, Visible = false, ZIndex = 30, Selectable = false})
-local modal = panel(root, "Menu", UDim2.fromOffset(540, 486), UDim2.new(0.5, -270, 0.5, -243), C.panel)
-modal.ZIndex = 31
-modal.Visible = false
-local modalTitle = label(modal, "HOW TO DASH", UDim2.new(1, -90, 0, 30), UDim2.fromOffset(24, 22), 24, C.text, true)
-modalTitle.ZIndex = 32
-local closeButton = button(modal, "X", UDim2.fromOffset(34, 34), UDim2.new(1, -54, 0, 20))
-closeButton.ZIndex = 33
-local modalSubtitle = label(modal, "", UDim2.new(1, -48, 0, 34), UDim2.fromOffset(24, 57), 12, C.muted)
-modalSubtitle.TextWrapped = true
-modalSubtitle.TextTruncate = Enum.TextTruncate.None
-modalSubtitle.ZIndex = 32
-local scroll = make("ScrollingFrame", modal, {Size = UDim2.new(1, -36, 1, -115), Position = UDim2.fromOffset(18, 98), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3, ScrollBarImageColor3 = C.muted, CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 32})
-make("UIListLayout", scroll, {Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder})
-make("UIPadding", scroll, {PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6), PaddingBottom = UDim.new(0, 8)})
-local footer = center(label(root, "DASHER  /  FIRST EDITION", UDim2.fromOffset(210, 20), UDim2.new(1, -228, 1, -29), 9, C.muted, true))
-
-local audioGroup = make("SoundGroup", SoundService, {Name = "DasherLocalAudio", Volume = 1})
--- Bundled assets verified in the installed Roblox content/sounds directory. No external IDs.
-local dashSound = make("Sound", SoundService, {Name = "DasherDash", SoundId = "rbxasset://sounds/action_jump.mp3", Volume = 0.22, PlaybackSpeed = 1.75, SoundGroup = audioGroup})
-local finishSound = make("Sound", SoundService, {Name = "DasherFinish", SoundId = "rbxasset://sounds/volume_slider.ogg", Volume = 0.35, PlaybackSpeed = 1.1, SoundGroup = audioGroup})
-
-local function showToast(message, color, duration)
-	toastSerial += 1
-	local serial = toastSerial
-	toastText.Text = tostring(message or "")
-	toastText.TextColor3 = color or C.text
-	toast.Visible = true
-	task.delay(duration or 3, function()
-		if serial == toastSerial then toast.Visible = false end
-	end)
+local gui=make("ScreenGui",player:WaitForChild("PlayerGui"),{Name="DasherHUD",ResetOnSpawn=false,IgnoreGuiInset=false,ZIndexBehavior=Enum.ZIndexBehavior.Sibling,DisplayOrder=20})
+local root=make("Frame",gui,{Name="SafeCanvas",Size=UDim2.fromScale(1,1),BackgroundTransparency=1})
+ui.launcher=button(root,"MENU / TAB",UDim2.fromOffset(116,38),UDim2.fromOffset(14,12))
+ui.status=panel(root,"RoundStatus",UDim2.fromOffset(328,52),UDim2.new(0.5,-164,0,12))
+ui.accent=make("Frame",ui.status,{Size=UDim2.fromOffset(3,26),Position=UDim2.fromOffset(13,13),BackgroundColor3=C.cyan,BorderSizePixel=0}) round(ui.accent,2)
+ui.map=label(ui.status,"DASHER",UDim2.new(1,-111,0,23),UDim2.fromOffset(26,5),17,C.text,true)
+ui.phase=label(ui.status,"WELCOME",UDim2.new(1,-111,0,18),UDim2.fromOffset(26,29),13,C.muted)
+ui.clock=label(ui.status,"--:--",UDim2.fromOffset(73,34),UDim2.new(1,-88,0,9),23,C.text,true) ui.clock.TextXAlignment=Enum.TextXAlignment.Right
+ui.balance=panel(root,"Balance",UDim2.fromOffset(126,42),UDim2.new(1,-140,0,12))
+ui.coins=label(ui.balance,"0",UDim2.new(1,-24,0,23),UDim2.fromOffset(12,2),18,C.gold,true)
+ui.level=label(ui.balance,"LEVEL 1",UDim2.new(1,-24,0,15),UDim2.fromOffset(12,25),12,C.muted)
+ui.energy=panel(root,"DashEnergy",UDim2.fromOffset(258,62),UDim2.new(0.5,-129,1,-76))
+ui.run=label(ui.energy,"FIND YOUR LINE",UDim2.new(1,-82,0,19),UDim2.fromOffset(12,5),14,C.muted)
+ui.progress=label(ui.energy,"0%",UDim2.fromOffset(52,19),UDim2.new(1,-64,0,5),14,C.cyan,true) ui.progress.TextXAlignment=Enum.TextXAlignment.Right
+ui.dash=label(ui.energy,"DASH READY",UDim2.new(1,-90,0,20),UDim2.fromOffset(12,26),15,C.text,true)
+ui.key=label(ui.energy,"Q / SHIFT",UDim2.fromOffset(78,20),UDim2.new(1,-90,0,26),12,C.muted) ui.key.TextXAlignment=Enum.TextXAlignment.Right
+local track=make("Frame",ui.energy,{Size=UDim2.new(1,-24,0,3),Position=UDim2.new(0,12,1,-8),BackgroundColor3=C.card,BorderSizePixel=0}) round(track,3)
+ui.charge=make("Frame",track,{Size=UDim2.fromScale(1,1),BackgroundColor3=C.cyan,BorderSizePixel=0}) round(ui.charge,3)
+local restartButton=button(root,"RESET R",UDim2.fromOffset(90,32),UDim2.new(0,14,1,-46)) restartButton.TextSize=14
+local touchDash=button(root,"DASH",UDim2.fromOffset(70,58),UDim2.new(1,-90,1,-202),C.cyan) touchDash.Visible=UserInputService.TouchEnabled
+local accelerateButton=button(root,"BOOST CLOCK",UDim2.fromOffset(148,36),UDim2.new(0.5,7,0,78),C.gold) accelerateButton.Visible=false
+ui.watch=button(root,"WATCH RACE",UDim2.fromOffset(148,36),UDim2.new(0.5,-155,0,78)) ui.watch.Visible=false
+ui.countdown=center(label(root,"",UDim2.fromOffset(240,96),UDim2.new(0.5,-120,0.35,-48),64,C.text,true)) ui.countdown.Visible=false
+ui.toast=panel(root,"Toast",UDim2.fromOffset(420,44),UDim2.new(0.5,-210,0,132)) ui.toast.Visible=false ui.toast.ZIndex=60
+ui.toastText=wrap(center(label(ui.toast,"",UDim2.new(1,-24,1,-8),UDim2.fromOffset(12,4),15,C.text,true))) ui.toastText.ZIndex=61
+ui.vote=panel(root,"MapVote",UDim2.fromOffset(486,138),UDim2.new(0.5,-243,1,-162)) ui.vote.Visible=false
+ui.voteTitle=label(ui.vote,"PICK THE NEXT COURSE",UDim2.new(1,-28,0,26),UDim2.fromOffset(14,7),15,C.text,true)
+ui.voteChoices=make("Frame",ui.vote,{Size=UDim2.new(1,-20,0,88),Position=UDim2.fromOffset(10,40),BackgroundTransparency=1})
+ui.spectator=panel(root,"Spectating",UDim2.fromOffset(340,48),UDim2.new(0.5,-170,1,-68)) ui.spectator.Visible=false
+ui.previous=button(ui.spectator,"<",UDim2.fromOffset(35,32),UDim2.fromOffset(8,8))
+ui.next=button(ui.spectator,">",UDim2.fromOffset(35,32),UDim2.new(1,-85,0,8))
+ui.stopWatch=button(ui.spectator,"X",UDim2.fromOffset(32,32),UDim2.new(1,-40,0,8))
+ui.watching=label(ui.spectator,"WATCHING",UDim2.new(1,-142,1,0),UDim2.fromOffset(51,0),15,C.text,true)
+ui.result=panel(root,"RoundSummary",UDim2.fromOffset(388,108),UDim2.new(0.5,-194,0.5,-54)) ui.result.Visible=false
+ui.resultTitle=label(ui.result,"ROUND COMPLETE",UDim2.new(1,-58,0,27),UDim2.fromOffset(13,8),19,C.text,true)
+ui.resultText=label(ui.result,"",UDim2.new(1,-26,0,22),UDim2.fromOffset(13,39),15,C.muted)
+ui.resultOpen=button(ui.result,"RESULTS",UDim2.fromOffset(115,28),UDim2.fromOffset(13,70)) ui.resultOpen.TextSize=14
+ui.resultClose=button(ui.result,"X",UDim2.fromOffset(28,28),UDim2.new(1,-40,0,8))
+ui.skip=button(root,"SKIP INTRO",UDim2.fromOffset(116,32),UDim2.new(0.5,-58,1,-58)) ui.skip.Visible=false ui.skip.ZIndex=25 ui.skip.TextSize=14
+local scrim=make("TextButton",root,{Name="ModalScrim",Size=UDim2.fromScale(1,1),BackgroundColor3=Color3.new(0,0,0),BackgroundTransparency=0.35,BorderSizePixel=0,Text="",AutoButtonColor=false,Visible=false,ZIndex=30,Selectable=false})
+local modal=make("CanvasGroup",root,{Name="Menu",Size=UDim2.fromOffset(608,486),Position=UDim2.new(0.5,-304,0.5,-243),BackgroundColor3=C.panel,BorderSizePixel=0,ZIndex=31,Visible=false}) round(modal,16) stroke(modal)
+ui.modalTitle=label(modal,"DASHER",UDim2.new(1,-86,0,30),UDim2.fromOffset(22,16),24,C.text,true)
+ui.modalSubtitle=label(modal,"",UDim2.new(1,-44,0,25),UDim2.fromOffset(22,48),15,C.muted)
+ui.close=button(modal,"X",UDim2.fromOffset(34,34),UDim2.new(1,-52,0,17))
+local navigation=make("ScrollingFrame",modal,{Name="Navigation",Size=UDim2.new(1,-36,0,39),Position=UDim2.fromOffset(18,80),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=2,CanvasSize=UDim2.fromOffset(0,0),AutomaticCanvasSize=Enum.AutomaticSize.X,ScrollingDirection=Enum.ScrollingDirection.X})
+make("UIListLayout",navigation,{FillDirection=Enum.FillDirection.Horizontal,Padding=UDim.new(0,7),SortOrder=Enum.SortOrder.LayoutOrder})
+local scroll=make("ScrollingFrame",modal,{Name="Content",Size=UDim2.new(1,-32,1,-137),Position=UDim2.fromOffset(16,129),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=3,ScrollBarImageColor3=C.muted,CanvasSize=UDim2.fromOffset(0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y})
+make("UIListLayout",scroll,{Padding=UDim.new(0,9),SortOrder=Enum.SortOrder.LayoutOrder})
+make("UIPadding",scroll,{PaddingLeft=UDim.new(0,3),PaddingRight=UDim.new(0,7),PaddingBottom=UDim.new(0,10)})
+local audioGroup=make("SoundGroup",SoundService,{Name="DasherLocalAudio",Volume=1})
+local dashSound=make("Sound",SoundService,{Name="DasherDash",SoundId="rbxasset://sounds/action_jump.mp3",Volume=0.18,PlaybackSpeed=1.75,SoundGroup=audioGroup})
+local finishSound=make("Sound",SoundService,{Name="DasherFinish",SoundId="rbxasset://sounds/volume_slider.ogg",Volume=0.3,PlaybackSpeed=1.1,SoundGroup=audioGroup})
+local function showToast(message,color,duration)
+ toastSerial+=1 local serial=toastSerial
+ ui.toastText.Text=tostring(message or "") ui.toastText.TextColor3=color or C.text ui.toast.Visible=true
+ task.delay(duration or 3,function() if serial==toastSerial then ui.toast.Visible=false end end)
 end
-
 local function setModalLayer(parent)
-	for _, child in ipairs(parent:GetDescendants()) do
-		if child:IsA("GuiObject") then child.ZIndex = 34 end
-	end
+ for _,item in ipairs(parent:GetDescendants()) do if item:IsA("GuiObject") then item.ZIndex=34 end end
 end
-
-local function clearMenu()
-	shopButtons = {}
-	for _, child in ipairs(scroll:GetChildren()) do
-		if child:IsA("GuiObject") then child:Destroy() end
-	end
-	scroll.CanvasPosition = Vector2.zero
+local function menuCard(height,order)
+ local card=panel(scroll,"Card",UDim2.new(1,-5,0,height),UDim2.fromOffset(0,0),C.card) card.LayoutOrder=order card.ZIndex=33 return card
 end
-
-local function menuCard(height, order)
-	local card = panel(scroll, "Card", UDim2.new(1, -6, 0, height), UDim2.fromOffset(0, 0), C.card)
-	card.LayoutOrder = order
-	card.ZIndex = 33
-	return card
+local function textCard(title,body,order,height)
+ local card=menuCard(height or 98,order)
+ label(card,title,UDim2.new(1,-28,0,25),UDim2.fromOffset(14,10),17,C.text,true)
+ local desc=wrap(label(card,body,UDim2.new(1,-28,1,-45),UDim2.fromOffset(14,38),15,C.muted)) desc.TextYAlignment=Enum.TextYAlignment.Top
+ setModalLayer(card) return card
 end
-
-local function closeMenu()
-	menuOpen = false
-	modal.Visible = false
-	scrim.Visible = false
-	if GuiService.SelectedObject and GuiService.SelectedObject:IsDescendantOf(modal) then GuiService.SelectedObject = nil end
-end
-
 local function updateShopButtons()
-	for id, entry in pairs(shopButtons) do
-		local owned = snapshot.owned and snapshot.owned[id]
-		entry.button.Text = snapshot.equipped == id and "EQUIPPED" or (owned and "EQUIP" or (coinText(entry.price) .. " COINS"))
-		entry.button.BackgroundColor3 = snapshot.equipped == id and C.cyan or C.panel
-		entry.button.TextColor3 = snapshot.equipped == id and C.ink or (owned and C.text or C.gold)
-	end
+ for id,entry in pairs(shopButtons) do
+  local owned=snapshot.owned and snapshot.owned[id]
+  entry.button.Text=snapshot.equipped==id and "EQUIPPED" or (owned and "EQUIP" or coinText(entry.price).." COINS")
+  entry.button.BackgroundColor3=snapshot.equipped==id and C.cyan or C.panel
+  entry.button.TextColor3=snapshot.equipped==id and C.ink or (owned and C.text or C.gold)
+ end
 end
-
-local function openMenu(page)
-	menuPage = page
-	clearMenu()
-	menuOpen = true
-	modal.Visible = true
-	scrim.Visible = true
-	if page == "Trails" then
-		modalTitle.Text = "LEAVE YOUR MARK"
-		modalSubtitle.Text = "Cosmetic trails. Same speed. Same chance to win."
-		for index, cosmetic in ipairs(Config.Cosmetics) do
-			local card = menuCard(70, index)
-			local swatch = make("Frame", card, {Size = UDim2.fromOffset(6, 34), Position = UDim2.fromOffset(17, 18), BackgroundColor3 = cosmetic.color, BorderSizePixel = 0, Rotation = 18})
-			round(swatch, 3)
-			label(card, string.upper(cosmetic.name), UDim2.new(1, -176, 0, 23), UDim2.fromOffset(36, 12), 13, C.text, true)
-			label(card, "DASH TRAIL", UDim2.new(1, -176, 0, 18), UDim2.fromOffset(36, 36), 9, C.muted, true)
-			local buy = button(card, "", UDim2.fromOffset(120, 36), UDim2.new(1, -133, 0, 17))
-			shopButtons[cosmetic.id] = {button = buy, price = cosmetic.price}
-			buy.Activated:Connect(function()
-				if snapshot.equipped == cosmetic.id then return end
-				if snapshot.owned and snapshot.owned[cosmetic.id] then
-					Action:FireServer("Equip", cosmetic.id)
-				elseif (snapshot.coins or 0) >= cosmetic.price then
-					Action:FireServer("Buy", cosmetic.id)
-				else
-					showToast("Finish races to earn more coins.", C.gold)
-				end
-			end)
-			setModalLayer(card)
-		end
-		updateShopButtons()
-	elseif page == "Setup" then
-		modalTitle.Text = "MAKE IT YOURS"
-		modalSubtitle.Text = "Comfort settings apply to this play session."
-		local motionCard = menuCard(82, 1)
-		label(motionCard, "REDUCED MOTION", UDim2.new(1, -144, 0, 24), UDim2.fromOffset(16, 12), 13, C.text, true)
-		local motionDesc = label(motionCard, "No dash zoom. Shorter trails.", UDim2.new(1, -144, 0, 31), UDim2.fromOffset(16, 37), 11, C.muted)
-		motionDesc.TextWrapped = true
-		local motion = button(motionCard, reducedMotion and "ON" or "OFF", UDim2.fromOffset(80, 34), UDim2.new(1, -96, 0, 24), reducedMotion and C.cyan or nil)
-		motion.Activated:Connect(function()
-			reducedMotion = not reducedMotion
-			motion.Text = reducedMotion and "ON" or "OFF"
-			motion.BackgroundColor3 = reducedMotion and C.cyan or C.panel
-			motion.TextColor3 = reducedMotion and C.ink or C.text
-			if reducedMotion then cameraKick = 0 end
-		end)
-		setModalLayer(motionCard)
-		local soundCard = menuCard(82, 2)
-		label(soundCard, "DASH & UI SOUNDS", UDim2.new(1, -144, 0, 24), UDim2.fromOffset(16, 12), 13, C.text, true)
-		local soundDesc = label(soundCard, "Soft feedback for dashes and finishes.", UDim2.new(1, -144, 0, 31), UDim2.fromOffset(16, 37), 11, C.muted)
-		soundDesc.TextWrapped = true
-		local soundButton = button(soundCard, muted and "OFF" or "ON", UDim2.fromOffset(80, 34), UDim2.new(1, -96, 0, 24), not muted and C.cyan or nil)
-		soundButton.Activated:Connect(function()
-			muted = not muted
-			audioGroup.Volume = muted and 0 or 1
-			soundButton.Text = muted and "OFF" or "ON"
-			soundButton.BackgroundColor3 = muted and C.panel or C.cyan
-			soundButton.TextColor3 = muted and C.text or C.ink
-		end)
-		setModalLayer(soundCard)
-		local note = menuCard(65, 3)
-		local noteText = label(note, "Every fall returns you to the start. Your personal timer keeps running. Your avatar stays your own.", UDim2.new(1, -32, 1, -18), UDim2.fromOffset(16, 9), 12, C.muted)
-		noteText.TextWrapped = true
-		noteText.TextTruncate = Enum.TextTruncate.None
-		setModalLayer(note)
-	elseif page == "Results" then
-		modalTitle.Text = "ROUND COMPLETE"
-		modalSubtitle.Text = "Real finish times. A fresh course is up next."
-		if #(snapshot.finishers or {}) == 0 then
-			local empty = menuCard(86, 1)
-			local emptyText = center(label(empty, "No finishers this round.\nLearn the route. Take another run.", UDim2.new(1, -30, 1, -18), UDim2.fromOffset(15, 9), 14, C.muted))
-			emptyText.TextWrapped = true
-			setModalLayer(empty)
-		else
-			for index, result in ipairs(snapshot.finishers) do
-				if index > 10 then break end
-				local card = menuCard(64, index)
-				label(card, string.format("%02d", index), UDim2.fromOffset(34, 40), UDim2.fromOffset(13, 11), 20, index == 1 and C.gold or C.muted, true)
-				label(card, result.name or "Runner", UDim2.new(1, -174, 0, 24), UDim2.fromOffset(56, 10), 13, result.userId == player.UserId and C.cyan or C.text, true)
-				label(card, "+" .. coinText(result.coins) .. " coins", UDim2.new(1, -174, 0, 19), UDim2.fromOffset(56, 34), 10, C.gold)
-				local finishTime = label(card, timeText(result.time, true), UDim2.fromOffset(103, 35), UDim2.new(1, -119, 0, 15), 15, C.text, true)
-				finishTime.TextXAlignment = Enum.TextXAlignment.Right
-				setModalLayer(card)
-			end
-		end
-	else
-		modalTitle.Text = "ONE DASH. ALL SKILL."
-		modalSubtitle.Text = "Three worlds. One finish line. No checkpoints."
-		local steps = {
-			{"01", "MOVE. JUMP. DASH.", "WASD + Space. Q or Shift to dash. On controller: A to jump, X to dash. On touch: use the on-screen controls."},
-			{"02", "COMMIT TO YOUR LINE", "Dash in your movement direction. With no movement input, dash where the camera faces. Jump before long gaps."},
-			{"03", "FALL. LEARN. REPEAT.", "Falls and red hazards return you to the start. R / controller Y restarts your run. Your timer never rewinds."},
-			{"04", "FINISH. SET THE PACE.", "The first finisher can speed up the shared round clock once. Your personal time is always measured in real seconds."},
-		}
-		for index, item in ipairs(steps) do
-			local cardHeight = root.AbsoluteSize.X < 520 and 123 or 99
-			local card = menuCard(cardHeight, index)
-			label(card, item[1], UDim2.fromOffset(31, 32), UDim2.fromOffset(12, 10), 18, C.cyan, true)
-			label(card, item[2], UDim2.new(1, -69, 0, 24), UDim2.fromOffset(51, 9), 12, C.text, true)
-			local body = label(card, item[3], UDim2.new(1, -69, 0, cardHeight - 45), UDim2.fromOffset(51, 34), 11, C.muted)
-			body.TextWrapped = true
-			body.TextTruncate = Enum.TextTruncate.None
-			body.TextYAlignment = Enum.TextYAlignment.Top
-			setModalLayer(card)
-		end
-	end
-	if UserInputService.GamepadEnabled then GuiService.SelectedObject = closeButton end
+local function updateQuestControls()
+ local p=snapshot.progression or {}
+ if questControls.daily then questControls.daily.Text=p.dailyAvailable and "CLAIM" or "CLAIMED" end
+ if questControls.weekly then questControls.weekly.Text=p.weeklyClaimed and "CLAIMED" or ((p.weeklyProgress or 0)>=(p.weeklyTarget or 10) and "CLAIM" or "IN PROGRESS") end
+ if questControls.progress then questControls.progress.Text=string.format("Finish %d courses  /  %d of %d",p.weeklyTarget or 10,p.weeklyProgress or 0,p.weeklyTarget or 10) end
 end
-
-trailsButton.Activated:Connect(function() openMenu("Trails") end)
-helpButton.Activated:Connect(function() openMenu("Help") end)
-setupButton.Activated:Connect(function() openMenu("Setup") end)
-closeButton.Activated:Connect(function()
-	if menuPage == "Results" then closedResultsRound = snapshot.roundId end
-	closeMenu()
-end)
-scrim.Activated:Connect(function()
-	if menuPage == "Results" then closedResultsRound = snapshot.roundId end
-	closeMenu()
-end)
+restoreCamera=function()
+ cinematic=nil spectateTarget=nil cameraKick=0 ui.skip.Visible=false ui.spectator.Visible=false
+ local camera=workspace.CurrentCamera
+ if camera then
+  if camera==lastCamera then camera.FieldOfView=math.clamp(camera.FieldOfView-cameraOffsetApplied,1,120) end
+  cameraOffsetApplied=0 camera.CameraType=Enum.CameraType.Custom
+  local humanoid=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+  if humanoid then camera.CameraSubject=humanoid end
+ end
+end
+local function beginCinematic(from,to,lookAt,duration)
+ if reducedMotion or menuOpen or snapshot.phase=="Racing" or not workspace.CurrentCamera then return end
+ restoreCamera() cinematic={from=from,to=to,lookAt=lookAt,started=os.clock(),duration=duration}
+ workspace.CurrentCamera.CameraType=Enum.CameraType.Scriptable ui.skip.Visible=true
+end
+local function playLobbyIntro()
+ if introPlayed or snapshot.phase=="Racing" or snapshot.phase=="Countdown" then return end
+ local lobby=workspace:FindFirstChild("Lobby")
+ local start=lobby and lobby:FindFirstChild("CameraStart",true)
+ local finish=lobby and lobby:FindFirstChild("CameraEnd",true)
+ local look=lobby and lobby:FindFirstChild("CameraLookAt",true)
+ if start and finish and look and start:IsA("BasePart") and finish:IsA("BasePart") and look:IsA("BasePart") then introPlayed=true beginCinematic(start.Position,finish.Position,look.Position,2.8) end
+end
+local function playMapIntro(roundId)
+ task.spawn(function()
+  local map=workspace:FindFirstChild("ActiveMap") local start=map and map:FindFirstChild("Start",true)
+  for _=1,12 do
+   if start or snapshot.phase~="Countdown" or snapshot.roundId~=roundId then break end
+   task.wait(0.1) map=workspace:FindFirstChild("ActiveMap") start=map and map:FindFirstChild("Start",true)
+  end
+  if snapshot.phase~="Countdown" or snapshot.roundId~=roundId or not start or not start:IsA("BasePart") then return end
+  local forward=start.CFrame.LookVector local finish=map:FindFirstChild("Finish",true)
+  if finish and finish:IsA("BasePart") then local delta=finish.Position-start.Position if delta.Magnitude>1 then forward=delta.Unit end end
+  beginCinematic(start.Position-forward*24+Vector3.new(0,22,0),start.Position-forward*12+Vector3.new(0,9,0),start.Position+forward*40,math.min(2.3,math.max(0.8,(snapshot.timeLeft or 4)-0.7)))
+ end)
+end
+local function spectatorCandidates()
+ local result={}
+ for _,racer in ipairs(snapshot.racers or {}) do
+  local person=Players:GetPlayerByUserId(racer.userId)
+  local humanoid=person and person.Character and person.Character:FindFirstChildOfClass("Humanoid")
+  if person~=player and not racer.finished and humanoid and humanoid.Health>0 then table.insert(result,{person=person,humanoid=humanoid,name=racer.displayName or racer.name or person.DisplayName}) end
+ end return result
+end
+setSpectate=function(step)
+ local candidates=spectatorCandidates()
+ if #candidates==0 then Action:FireServer("Spectate",false) restoreCamera() showToast("No runners to watch right now.",C.muted) return end
+ local index=1
+ for i,item in ipairs(candidates) do if item.person==spectateTarget then index=((i-1+(step or 0))%#candidates)+1 break end end
+ local chosen=candidates[index] cinematic=nil ui.skip.Visible=false spectateTarget=chosen.person
+ local camera=workspace.CurrentCamera if camera then camera.CameraType=Enum.CameraType.Custom camera.CameraSubject=chosen.humanoid end
+ ui.spectator.Visible=true ui.watching.Text=chosen.name
+end
+closeMenu=function()
+ menuSerial+=1 local serial=menuSerial menuOpen=false
+ if GuiService.SelectedObject and GuiService.SelectedObject:IsDescendantOf(modal) then GuiService.SelectedObject=nil end
+ if reducedMotion then modal.Visible=false scrim.Visible=false else
+  TweenService:Create(modal,TweenInfo.new(0.12),{GroupTransparency=1}):Play()
+  task.delay(0.13,function() if serial==menuSerial then modal.Visible=false scrim.Visible=false end end)
+ end
+end
+openMenu=function(page)
+ if cinematic then restoreCamera() end
+ menuSerial+=1 menuOpen=true menuPage=page or "Home" shopButtons={} questControls={}
+ for _,item in ipairs(scroll:GetChildren()) do if item:IsA("GuiObject") then item:Destroy() end end
+ scroll.CanvasPosition=Vector2.zero modal.Visible=true scrim.Visible=true modal.GroupTransparency=reducedMotion and 0 or 1
+ TweenService:Create(modal,TweenInfo.new(reducedMotion and 0 or 0.18),{GroupTransparency=0}):Play()
+ ui.modalTitle.Text=string.upper(menuPage) ui.modalSubtitle.Text="Find your line. Make it count."
+ if menuPage=="Shop" or menuPage=="Inventory" then
+  ui.modalTitle.Text=menuPage=="Shop" and "THE TRAIL COLLECTION" or "YOUR LOCKER"
+  ui.modalSubtitle.Text=menuPage=="Shop" and "All style. Every runner has the same movement." or "Choose the signature you leave behind."
+  local count=0
+  for _,cosmetic in ipairs(Config.Cosmetics) do
+   if menuPage=="Shop" or (snapshot.owned and snapshot.owned[cosmetic.id]) then
+    count+=1 local card=menuCard(77,count)
+    local swatch=make("Frame",card,{Size=UDim2.fromOffset(7,37),Position=UDim2.fromOffset(17,20),BackgroundColor3=cosmetic.color,BorderSizePixel=0,Rotation=18}) round(swatch,4)
+    label(card,cosmetic.name,UDim2.new(1,-182,0,25),UDim2.fromOffset(39,13),18,C.text,true)
+    label(card,cosmetic.rarity or "Dash trail",UDim2.new(1,-182,0,20),UDim2.fromOffset(39,41),14,C.muted)
+    local buy=button(card,"",UDim2.fromOffset(127,37),UDim2.new(1,-140,0,20)) buy.TextSize=14
+    shopButtons[cosmetic.id]={button=buy,price=cosmetic.price}
+    buy.Activated:Connect(function()
+     if snapshot.equipped==cosmetic.id then return end
+     if snapshot.owned and snapshot.owned[cosmetic.id] then Action:FireServer("Equip",cosmetic.id)
+     elseif (snapshot.coins or 0)>=cosmetic.price then Action:FireServer("Buy",cosmetic.id)
+     else showToast("Race and complete quests to earn more coins.",C.gold) end
+    end) setModalLayer(card)
+   end
+  end updateShopButtons()
+ elseif menuPage=="Quests" then
+  local p=snapshot.progression or {}
+  ui.modalSubtitle.Text=string.format("Level %d  /  %s XP",p.level or 1,coinText(p.xp or 0))
+  local daily=menuCard(100,1)
+  label(daily,"DAILY CHECK-IN",UDim2.new(1,-148,0,26),UDim2.fromOffset(14,10),17,C.text,true)
+  wrap(label(daily,"+"..coinText(p.dailyReward or 25).." coins. Refreshes at 00:00 UTC.",UDim2.new(1,-148,0,48),UDim2.fromOffset(14,40),15,C.muted))
+  questControls.daily=button(daily,"",UDim2.fromOffset(110,38),UDim2.new(1,-123,0,31),C.cyan)
+  questControls.daily.Activated:Connect(function() if (snapshot.progression or {}).dailyAvailable then Action:FireServer("ClaimDaily") end end) setModalLayer(daily)
+  local weekly=menuCard(117,2)
+  label(weekly,"WEEKLY RUNNER",UDim2.new(1,-150,0,26),UDim2.fromOffset(14,10),17,C.text,true)
+  questControls.progress=wrap(label(weekly,"",UDim2.new(1,-150,0,42),UDim2.fromOffset(14,38),15,C.muted))
+  label(weekly,"+"..coinText(p.weeklyReward or 80).." coins",UDim2.new(1,-28,0,23),UDim2.fromOffset(14,87),15,C.gold)
+  questControls.weekly=button(weekly,"",UDim2.fromOffset(122,38),UDim2.new(1,-135,0,38)) questControls.weekly.TextSize=13
+  questControls.weekly.Activated:Connect(function() local q=snapshot.progression or {} if not q.weeklyClaimed and (q.weeklyProgress or 0)>=(q.weeklyTarget or 10) then Action:FireServer("ClaimWeekly") end end) setModalLayer(weekly)
+  textCard("PLAY AT YOUR PACE","Missing a day never removes your coins or progress. All gameplay abilities stay equal.",3,96)
+  updateQuestControls()
+ elseif menuPage=="Leaderboard" or menuPage=="Results" then
+  local board=snapshot.leaderboard or {} local results=menuPage=="Results"
+  ui.modalSubtitle.Text=results and "Finish order / real run times" or ((board.scope or "Weekly ranking").." / earned by finishing races")
+  local entries=results and (snapshot.finishers or {}) or (board.entries or {})
+  if #entries==0 then
+   local title,body="SET THE FIRST SCORE","Finish a course to put your name on the board. Rankings refresh periodically."
+   if results then title="A NEW CHALLENGE" body="No finishers this round. Learn the route and make the next one count."
+   elseif board.status=="unavailable" then title="RANKING UNAVAILABLE" body="We could not load the weekly board. Your saved progress remains separate. Try again shortly."
+   elseif board.status=="loading" then title="LOADING THE BOARD" body="Fetching the latest weekly scores. Reopen this page in a moment." end
+   textCard(title,body,1,110)
+  end
+  for index,result in ipairs(entries) do
+   if index>20 then break end local card=menuCard(66,index)
+   label(card,string.format("%02d",index),UDim2.fromOffset(32,42),UDim2.fromOffset(12,12),20,index==1 and C.gold or C.muted,true)
+   label(card,result.name or "Runner",UDim2.new(1,-172,0,28),UDim2.fromOffset(52,8),17,result.userId==player.UserId and C.cyan or C.text,true)
+   label(card,results and ("+"..coinText(result.coins).." coins") or "WEEKLY SCORE",UDim2.new(1,-172,0,20),UDim2.fromOffset(52,38),13,C.muted)
+   local score=label(card,results and timeText(result.time,true) or coinText(result.score),UDim2.fromOffset(105,40),UDim2.new(1,-118,0,13),18,C.text,true) score.TextXAlignment=Enum.TextXAlignment.Right setModalLayer(card)
+  end
+ elseif menuPage=="Settings" then
+  ui.modalSubtitle.Text="Comfort settings for this play session."
+  local motion=textCard("REDUCED MOTION","Skips flyovers and dash zoom. Shortens trails.",1,105)
+  for _,item in ipairs(motion:GetChildren()) do if item:IsA("TextLabel") then item.Size=UDim2.new(1,-130,item.Size.Y.Scale,item.Size.Y.Offset) end end
+  local toggle=button(motion,reducedMotion and "ON" or "OFF",UDim2.fromOffset(83,36),UDim2.new(1,-97,0,34))
+  toggle.Activated:Connect(function() reducedMotion=not reducedMotion toggle.Text=reducedMotion and "ON" or "OFF" if reducedMotion then cameraKick=0 if cinematic then restoreCamera() end end end) setModalLayer(motion)
+  local sound=textCard("SOUND EFFECTS","Soft feedback for dashes and finishes.",2,105)
+  for _,item in ipairs(sound:GetChildren()) do if item:IsA("TextLabel") then item.Size=UDim2.new(1,-130,item.Size.Y.Scale,item.Size.Y.Offset) end end
+  local soundToggle=button(sound,muted and "OFF" or "ON",UDim2.fromOffset(83,36),UDim2.new(1,-97,0,34))
+  soundToggle.Activated:Connect(function() muted=not muted audioGroup.Volume=muted and 0 or 1 soundToggle.Text=muted and "OFF" or "ON" end) setModalLayer(sound)
+ elseif menuPage=="Watch" then
+  ui.modalTitle.Text="WATCH THE RACE" ui.modalSubtitle.Text="Choose your next move."
+  if snapshot.phase~="Racing" then textCard("THE NEXT RACE IS CLOSE","Spectating becomes available when runners are on the course.",1,105)
+  elseif not snapshot.finished and snapshot.racing then
+   textCard("LEAVE THIS RUN?","Watching now forfeits this round. You will earn no finish reward and can race again next round.",1,112)
+   local card=menuCard(60,2)
+   local yes=button(card,"FORFEIT & WATCH",UDim2.new(0.6,-20,0,38),UDim2.fromOffset(11,11)) yes.TextSize=14
+   local no=button(card,"KEEP RACING",UDim2.new(0.4,-13,0,38),UDim2.new(0.6,0,0,11),C.cyan) no.TextSize=14
+   yes.Activated:Connect(function() Action:FireServer("Spectate",true) closeMenu() end) no.Activated:Connect(closeMenu) setModalLayer(card)
+  else
+   if snapshot.forfeited then textCard("BACK NEXT ROUND","This round was forfeited. You can watch the remaining runners and race again next round.",1,100) end
+   local card=menuCard(64,2) local watch=button(card,"WATCH RUNNERS",UDim2.new(1,-24,0,40),UDim2.fromOffset(12,12),C.cyan)
+   watch.Activated:Connect(function() Action:FireServer("Spectate",true) closeMenu() end) setModalLayer(card)
+  end
+ elseif menuPage=="Help" then
+  ui.modalSubtitle.Text="Precision first. One dash charge. No checkpoints."
+  textCard("01 / MOVE, JUMP, DASH","WASD + Space. Q / Shift to dash. Controller: A to jump, X to dash. Touch: use the dash button.",1,110)
+  textCard("02 / PLAN YOUR NEXT LANDING","Your dash refills in "..tostring(Config.DashCooldown).." seconds. Rest on safe landings; follow the marked route to the finish.",2,110)
+  textCard("03 / FALL, LEARN, REPEAT","Every fall sends you to the course start. R / controller Y resets. Your run timer keeps going.",3,105)
+  textCard("04 / RACE TOGETHER","Vote between rounds. Finish for coins and weekly score. The first finisher can boost the clock; watch the others through the menu.",4,122)
+ else
+  local p=snapshot.progression or {} ui.modalTitle.Text="DASHER" ui.modalSubtitle.Text="Level "..tostring(p.level or 1).."  /  "..coinText(snapshot.coins).." coins"
+  textCard("FIND YOUR LINE","Five longer courses. One charge. No checkpoints. Finish clean, refine your route, and climb the weekly board.",1,110)
+  local shortcuts={{"YOUR LOCKER","Inventory"},{"TRAIL COLLECTION","Shop"},{"DAILY & WEEKLY","Quests"},{snapshot.phase=="Racing" and "WATCH THE RACE" or "WEEKLY LEADERS","Watch"}}
+  for index,item in ipairs(shortcuts) do
+   local card=menuCard(53,index+1) local key=(item[2]=="Watch" and snapshot.phase~="Racing") and "Leaderboard" or item[2]
+   local shortcut=button(card,item[1].."  >",UDim2.new(1,-16,0,37),UDim2.fromOffset(8,8)) shortcut.TextXAlignment=Enum.TextXAlignment.Left
+   make("UIPadding",shortcut,{PaddingLeft=UDim.new(0,12)}) shortcut.Activated:Connect(function() openMenu(key) end) setModalLayer(card)
+  end
+ end
+ for _,tab in ipairs(navigation:GetChildren()) do if tab:IsA("TextButton") then tab.BackgroundColor3=tab.Name==menuPage and C.cyan or C.card tab.TextColor3=tab.Name==menuPage and C.ink or C.text end end
+ setModalLayer(modal)
+ if UserInputService.GamepadEnabled then GuiService.SelectedObject=ui.close end
+end
+for index,page in ipairs({"Home","Shop","Inventory","Quests","Leaderboard","Settings","Help"}) do
+ local tab=button(navigation,page,UDim2.fromOffset(page=="Leaderboard" and 113 or 85,33),UDim2.fromOffset(0,0)) tab.Name=page tab.TextSize=14 tab.LayoutOrder=index
+ tab.Activated:Connect(function() openMenu(page) end)
+end
+ui.launcher.Activated:Connect(function() if menuOpen then closeMenu() else openMenu("Home") end end)
+ui.close.Activated:Connect(closeMenu) scrim.Activated:Connect(closeMenu) ui.skip.Activated:Connect(restoreCamera)
+ui.watch.Activated:Connect(function() Action:FireServer("Spectate",true) end)
+ui.previous.Activated:Connect(function() setSpectate(-1) end) ui.next.Activated:Connect(function() setSpectate(1) end)
+ui.stopWatch.Activated:Connect(function() Action:FireServer("Spectate",false) restoreCamera() end)
+ui.resultOpen.Activated:Connect(function() ui.result.Visible=false openMenu("Results") end)
+ui.resultClose.Activated:Connect(function() ui.result.Visible=false end)
+renderVotes=function()
+ local options=snapshot.voteOptions or {} local changed=#voteButtons~=#options
+ if not changed then for i,option in ipairs(options) do if voteButtons[i].id~=option.id then changed=true break end end end
+ if changed then
+  for _,item in ipairs(ui.voteChoices:GetChildren()) do item:Destroy() end voteButtons={}
+  for i,option in ipairs(options) do
+   local map=Config.Maps[option.id] or {}
+   local card=button(ui.voteChoices,"",UDim2.new(1/math.max(1,#options),-6,1,0),UDim2.new((i-1)/math.max(1,#options),3,0,0))
+   local bar=make("Frame",card,{Size=UDim2.new(1,-22,0,3),Position=UDim2.fromOffset(11,11),BackgroundColor3=map.accent or C.cyan,BorderSizePixel=0}) round(bar,3)
+   local name=wrap(label(card,option.name or option.id,UDim2.new(1,-20,0,38),UDim2.fromOffset(10,19),14,C.text,true))
+   local count=label(card,"",UDim2.new(1,-20,0,18),UDim2.fromOffset(10,64),13,C.muted)
+   card.Activated:Connect(function() Action:FireServer("Vote",option.id) end)
+   voteButtons[i]={id=option.id,button=card,count=count,name=name}
+  end
+ end
+ for i,option in ipairs(options) do
+  local entry=voteButtons[i] local chosen=snapshot.myVote==option.id
+  entry.button.BackgroundColor3=chosen and C.card or C.panel entry.name.TextColor3=chosen and C.cyan or C.text
+  entry.count.Text=(chosen and "PICKED / " or "")..tostring(option.votes or 0).." votes"
+ end
+end
 
 local function restoreEffect(effect)
 	for motor, base in pairs(effect.bases or {}) do
@@ -465,7 +425,7 @@ local function dashCast(rootPart, direction, distance)
 end
 
 local function tryDash()
-	if menuOpen or GuiService.MenuIsOpen or UserInputService:GetFocusedTextBox() then return end
+	if cinematic or spectateTarget or menuOpen or GuiService.MenuIsOpen or UserInputService:GetFocusedTextBox() then return end
 	if snapshot.phase ~= "Racing" or not snapshot.racing or snapshot.finished then return end
 	local accepted = player:GetAttribute("DashAt")
 	local serverCooldown = typeof(accepted) == "number" and workspace:GetServerTimeNow() - accepted < Config.DashCooldown
@@ -509,130 +469,99 @@ local function tryRestart()
 	Action:FireServer("Restart")
 end
 
+
 touchDash.Activated:Connect(tryDash)
 restartButton.Activated:Connect(tryRestart)
-accelerateButton.Activated:Connect(function()
-	if snapshot.canAccelerate then
-		Action:FireServer("Accelerate")
-		accelerateButton.Visible = false
-	end
-end)
-
-ContextActionService:BindAction("DasherDash", function(_, state)
-	if UserInputService:GetFocusedTextBox() or GuiService.MenuIsOpen then return Enum.ContextActionResult.Pass end
-	if state == Enum.UserInputState.Begin then tryDash() end
-	return menuOpen and Enum.ContextActionResult.Pass or Enum.ContextActionResult.Sink
-end, false, Enum.KeyCode.Q, Enum.KeyCode.LeftShift, Enum.KeyCode.ButtonX)
-ContextActionService:BindAction("DasherRestart", function(_, state)
-	if UserInputService:GetFocusedTextBox() or GuiService.MenuIsOpen then return Enum.ContextActionResult.Pass end
-	if state == Enum.UserInputState.Begin then tryRestart() end
-	return menuOpen and Enum.ContextActionResult.Pass or Enum.ContextActionResult.Sink
-end, false, Enum.KeyCode.R, Enum.KeyCode.ButtonY)
-ContextActionService:BindAction("DasherHelp", function(_, state)
-	if UserInputService:GetFocusedTextBox() or GuiService.MenuIsOpen then return Enum.ContextActionResult.Pass end
-	if state == Enum.UserInputState.Begin then
-		if menuOpen then closeMenu() else openMenu("Help") end
-	end
-	return Enum.ContextActionResult.Sink
-end, false, Enum.KeyCode.H, Enum.KeyCode.ButtonSelect)
-table.insert(connections, UserInputService.InputBegan:Connect(function(input, processed)
-	if processed then return end
-	if input.KeyCode == Enum.KeyCode.ButtonB and menuOpen then closeMenu() end
-end))
-
+accelerateButton.Activated:Connect(function() if snapshot.canAccelerate then Action:FireServer("Accelerate") accelerateButton.Visible=false end end)
+ContextActionService:BindAction("DasherDash",function(_,state)
+ if UserInputService:GetFocusedTextBox() or GuiService.MenuIsOpen then return Enum.ContextActionResult.Pass end
+ if menuOpen or snapshot.phase~="Racing" or not snapshot.racing or snapshot.finished or snapshot.spectating then return Enum.ContextActionResult.Pass end
+ if state==Enum.UserInputState.Begin then tryDash() end
+ return menuOpen and Enum.ContextActionResult.Pass or Enum.ContextActionResult.Sink
+end,false,Enum.KeyCode.Q,Enum.KeyCode.LeftShift,Enum.KeyCode.ButtonX)
+ContextActionService:BindAction("DasherRestart",function(_,state)
+ if UserInputService:GetFocusedTextBox() or GuiService.MenuIsOpen then return Enum.ContextActionResult.Pass end
+ if menuOpen or snapshot.phase~="Racing" or not snapshot.racing or snapshot.finished or snapshot.spectating then return Enum.ContextActionResult.Pass end
+ if state==Enum.UserInputState.Begin then tryRestart() end
+ return menuOpen and Enum.ContextActionResult.Pass or Enum.ContextActionResult.Sink
+end,false,Enum.KeyCode.R,Enum.KeyCode.ButtonY)
+ContextActionService:BindAction("DasherMenu",function(_,state)
+ if UserInputService:GetFocusedTextBox() or GuiService.MenuIsOpen then return Enum.ContextActionResult.Pass end
+ if state==Enum.UserInputState.Begin then if menuOpen then closeMenu() else openMenu("Home") end end
+ return Enum.ContextActionResult.Sink
+end,false,Enum.KeyCode.Tab,Enum.KeyCode.H,Enum.KeyCode.ButtonSelect)
+ContextActionService:BindAction("DasherSpectate",function(_,state,input)
+ if state~=Enum.UserInputState.Begin or UserInputService:GetFocusedTextBox() or GuiService.MenuIsOpen then return Enum.ContextActionResult.Pass end
+ if input.KeyCode==Enum.KeyCode.ButtonB and menuOpen then closeMenu() return Enum.ContextActionResult.Sink end
+ if not spectateTarget then return Enum.ContextActionResult.Pass end
+ if input.KeyCode==Enum.KeyCode.ButtonB then Action:FireServer("Spectate",false) restoreCamera()
+ else setSpectate(input.KeyCode==Enum.KeyCode.ButtonL1 and -1 or 1) end
+ return Enum.ContextActionResult.Sink
+end,false,Enum.KeyCode.ButtonL1,Enum.KeyCode.ButtonR1,Enum.KeyCode.ButtonB)
 local function onCharacter(character)
-	stopDash(true)
-	for _, connection in ipairs(characterConnections) do connection:Disconnect() end
-	characterConnections = {}
-	localDashAt = -100
-	cameraKick = 0
-	task.spawn(function()
-		local humanoid = character:WaitForChild("Humanoid", 10)
-		if not humanoid or character ~= player.Character then return end
-		table.insert(characterConnections, humanoid.Died:Connect(function()
-			stopDash(true)
-			endEffect(character)
-		end))
-	end)
+ if snapshot.spectating then Action:FireServer("Spectate",false) end
+ stopDash(true) restoreCamera()
+ for _,connection in ipairs(characterConnections) do connection:Disconnect() end characterConnections={}
+ localDashAt=-100
+ task.spawn(function()
+  local humanoid=character:WaitForChild("Humanoid",10)
+  if not humanoid or character~=player.Character then return end
+  restoreCamera()
+  table.insert(characterConnections,humanoid.Died:Connect(function() stopDash(true) endEffect(character) restoreCamera() end))
+ end)
 end
-table.insert(connections, player.CharacterAdded:Connect(onCharacter))
-table.insert(connections, player.CharacterRemoving:Connect(function(character)
-	stopDash(true)
-	endEffect(character)
-end))
+table.insert(connections,player.CharacterAdded:Connect(onCharacter))
+table.insert(connections,player.CharacterRemoving:Connect(function(character) stopDash(true) endEffect(character) restoreCamera() end))
 if player.Character then onCharacter(player.Character) end
-
-table.insert(connections, DashFX.OnClientEvent:Connect(function(person, direction)
-	-- Our own movement and FX were predicted immediately. Never replay either on confirmation.
-	if person == player or typeof(person) ~= "Instance" or not person:IsA("Player") then return end
-	if typeof(direction) ~= "Vector3" then return end
-	if person.Character then dashEffect(person.Character, direction, person:GetAttribute("EquippedTrail") or "ice") end
+table.insert(connections,Players.PlayerRemoving:Connect(function(person) if person==spectateTarget then setSpectate(1) end end))
+table.insert(connections,DashFX.OnClientEvent:Connect(function(person,direction)
+ if person==player or typeof(person)~="Instance" or not person:IsA("Player") or typeof(direction)~="Vector3" then return end
+ if person.Character then dashEffect(person.Character,direction,person:GetAttribute("EquippedTrail") or "ice") end
 end))
-
-table.insert(connections, Feedback.OnClientEvent:Connect(function(kind, message, extra)
-	if kind == "DashDenied" then
-		stopDash(true)
-		if player.Character then endEffect(player.Character) end
-		cameraKick = 0
-	elseif kind == "Reset" then
-		stopDash(true)
-		localDashAt = -100
-		if player.Character then endEffect(player.Character) end
-		showToast(message ~= "" and message or "Back to the start. Find your line.", C.muted, 1.8)
-	elseif kind == "Finish" then
-		stopDash(true)
-		lastFinished = type(extra) == "table" and extra or nil
-		if not muted then finishSound:Play() end
-		showToast(lastFinished and string.format("FINISHED  %s  /  +%s COINS", timeText(lastFinished.time, true), coinText(lastFinished.coins)) or message, C.gold, 5)
-	elseif kind == "Error" then
-		showToast(message, C.red)
-	elseif kind == "Purchase" then
-		showToast(message, C.gold)
-	else
-		showToast(message, C.text)
-	end
+table.insert(connections,Feedback.OnClientEvent:Connect(function(kind,message,extra)
+ if kind=="DashDenied" then stopDash(true) if player.Character then endEffect(player.Character) end cameraKick=0
+ elseif kind=="Reset" then stopDash(true) localDashAt=-100 if player.Character then endEffect(player.Character) end showToast(message~="" and message or "Back to the start. Find your line.",C.muted,1.5)
+ elseif kind=="Finish" then
+  stopDash(true) lastFinished=type(extra)=="table" and extra or nil
+  if not muted then finishSound:Play() end
+  showToast(lastFinished and string.format("FINISHED  %s  /  +%s COINS",timeText(lastFinished.time,true),coinText(lastFinished.coins)) or message,C.gold,4)
+ elseif kind=="Error" then showToast(message,C.red)
+ elseif kind=="Purchase" then showToast(message,C.gold)
+ else showToast(message,C.text) end
 end))
-
 local function updateSnapshot(nextSnapshot)
-	if type(nextSnapshot) ~= "table" then return end
-	local previousPhase = snapshot.phase
-	local previousRound = snapshot.roundId
-	snapshot = nextSnapshot
-	receivedAt = os.clock()
-	if previousRound ~= snapshot.roundId then
-		lastFinished = nil
-		closedResultsRound = nil
-		localDashAt = -100
-		stopDash(true)
-	end
-	if snapshot.phase ~= "Racing" or not snapshot.racing or snapshot.finished then stopDash(true) end
-	local mapConfig = Config.Maps[snapshot.mapId]
-	mapLabel.Text = string.upper(snapshot.mapName or (mapConfig and mapConfig.name) or "ENTER THE RACE")
-	slash.BackgroundColor3 = mapConfig and mapConfig.accent or C.cyan
-	phaseLabel.Text = ({Waiting = "GETTING READY", Intermission = "NEXT COURSE", Countdown = "ON YOUR MARK", Racing = "RACE IN PROGRESS", Results = "ROUND COMPLETE"})[snapshot.phase] or "DASHER"
-	balanceLabel.Text = coinText(snapshot.coins)
-	local status = snapshot.saveStatus
-	saveLabel.Text = status == "session" and "SESSION COINS" or (status == "error" and "SAVE UNAVAILABLE" or (status == "loading" and "LOADING" or "COINS"))
-	saveLabel.TextColor3 = status == "error" and C.red or C.muted
-	accelerateButton.Visible = snapshot.canAccelerate == true and snapshot.phase == "Racing"
-	restartButton.Visible = snapshot.phase == "Racing" and snapshot.racing == true and not snapshot.finished
-	local progress = math.clamp(tonumber(snapshot.progress) or 0, 0, 1)
-	progressLabel.Text = snapshot.finished and "FINISHED" or string.format("%d%%", math.floor(progress * 100))
-	if reducedMotion then
-		progressFill.Size = UDim2.fromScale(progress, 1)
-	else
-		TweenService:Create(progressFill, TweenInfo.new(0.18), {Size = UDim2.fromScale(progress, 1)}):Play()
-	end
-	updateShopButtons()
-	if snapshot.phase == "Results" and previousPhase ~= "Results" and closedResultsRound ~= snapshot.roundId then
-		openMenu("Results")
-	elseif previousPhase == "Results" and snapshot.phase ~= "Results" and menuOpen and menuPage == "Results" then
-		closeMenu()
-	end
-	if snapshot.phase == "Countdown" and previousPhase ~= "Countdown" then closeMenu() end
+ if type(nextSnapshot)~="table" then return end
+ local previousPhase,previousRound,previousSpectating=snapshot.phase,snapshot.roundId,snapshot.spectating
+ snapshot=nextSnapshot receivedAt=os.clock()
+ if previousRound~=snapshot.roundId then lastFinished=nil localDashAt=-100 stopDash(true) restoreCamera() ui.result.Visible=false end
+ if snapshot.phase~="Racing" or not snapshot.racing or snapshot.finished then stopDash(true) end
+ if previousPhase~=snapshot.phase then
+  restoreCamera()
+  if snapshot.phase=="Countdown" then closeMenu() playMapIntro(snapshot.roundId)
+  elseif snapshot.phase=="Results" then
+   ui.result.Visible=true ui.resultTitle.Text=snapshot.finished and "COURSE COMPLETE" or "ROUND COMPLETE"
+   local first=(snapshot.finishers or {})[1]
+   ui.resultText.Text=first and ((first.name or "Runner").."  /  "..timeText(first.time,true)) or "Fresh course. Fresh start."
+   local resultRound=snapshot.roundId task.delay(5,function() if snapshot.roundId==resultRound then ui.result.Visible=false end end)
+  else ui.result.Visible=false if menuOpen and menuPage=="Results" then closeMenu() end end
+ end
+ if snapshot.phase=="Racing" and snapshot.spectating and not previousSpectating then setSpectate(0)
+ elseif not snapshot.spectating and previousSpectating then restoreCamera() end
+ local map=Config.Maps[snapshot.mapId]
+ ui.map.Text=snapshot.mapName or (map and map.name) or "DASHER" ui.accent.BackgroundColor3=map and map.accent or C.cyan
+ ui.phase.Text=({Waiting="WELCOME",Intermission="VOTE FOR A COURSE",Countdown="ON YOUR MARK",Racing="RACE IN PROGRESS",Results="ROUND COMPLETE"})[snapshot.phase] or "DASHER"
+ ui.coins.Text=coinText(snapshot.coins).."  COINS"
+ local p=snapshot.progression or {}
+ ui.level.Text=snapshot.saveStatus=="error" and "SAVE UNAVAILABLE" or (snapshot.saveStatus=="loading" and "LOADING" or ("LEVEL "..tostring(p.level or 1)..(snapshot.saveStatus=="session" and " / STUDIO" or "")))
+ ui.level.TextColor3=snapshot.saveStatus=="error" and C.red or C.muted
+ accelerateButton.Visible=snapshot.canAccelerate==true and snapshot.phase=="Racing"
+ ui.watch.Visible=snapshot.finished==true and snapshot.phase=="Racing" and not snapshot.spectating
+ restartButton.Visible=snapshot.phase=="Racing" and snapshot.racing==true and not snapshot.finished
+ ui.progress.Text=snapshot.finished and "DONE" or string.format("%d%%",math.floor(math.clamp(tonumber(snapshot.progress) or 0,0,1)*100))
+ updateShopButtons() updateQuestControls() renderVotes()
+ if snapshot.phase=="Intermission" then playLobbyIntro() end
 end
-table.insert(connections, State.OnClientEvent:Connect(updateSnapshot))
-
+table.insert(connections,State.OnClientEvent:Connect(updateSnapshot))
 -- Remove the prior overlay before animation evaluation to prevent accumulating rotations.
 table.insert(connections, RunService.PreAnimation:Connect(function()
 	for _, effect in pairs(effects) do restoreEffect(effect) end
@@ -683,140 +612,128 @@ table.insert(connections, RunService.PreSimulation:Connect(function(dt)
 	end
 end))
 
+
 local function updateInputHints()
-	local input = UserInputService:GetLastInputType()
-	local gamepad = string.find(input.Name, "Gamepad") ~= nil
-	local touch = input == Enum.UserInputType.Touch or (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled)
-	dashKey.Text = gamepad and "[X]" or (touch and "TAP DASH" or "Q / SHIFT")
-	restartButton.Text = gamepad and "RESTART  [Y]" or (touch and "RESTART" or "RESTART  [R]")
-	touchDash.Visible = UserInputService.TouchEnabled
+ local input=UserInputService:GetLastInputType()
+ local gamepad=string.find(input.Name,"Gamepad")~=nil
+ local touch=input==Enum.UserInputType.Touch or (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled)
+ ui.key.Text=gamepad and "X" or (touch and "TAP DASH" or "Q / SHIFT")
+ ui.launcher.Text=gamepad and "MENU / VIEW" or (touch and "MENU" or "MENU / TAB")
+ restartButton.Text=gamepad and "RESET Y" or (touch and "RESET" or "RESET R")
 end
-table.insert(connections, UserInputService.LastInputTypeChanged:Connect(updateInputHints))
-updateInputHints()
-
+table.insert(connections,UserInputService.LastInputTypeChanged:Connect(updateInputHints)) updateInputHints()
 local function layout()
-	local size = root.AbsoluteSize
-	local width, height = size.X, size.Y
-	local compact = width < 760
-	local portrait = width < 520
-	identity.Size = UDim2.fromOffset(compact and 158 or 224, compact and 68 or 78)
-	identity.Position = UDim2.fromOffset(compact and 12 or 20, 12)
-	mapLabel.Position = UDim2.fromOffset(17, compact and 43 or 49)
-	mapLabel.TextSize = compact and 8 or 10
-	coinPanel.Size = UDim2.fromOffset(compact and 138 or 164, 56)
-	coinPanel.Position = UDim2.new(1, compact and -150 or -184, 0, 12)
-	timerPanel.Position = portrait and UDim2.new(0.5, -78, 0, 88) or UDim2.new(0.5, -90, 0, 12)
-	timerPanel.Size = UDim2.fromOffset(portrait and 156 or 180, portrait and 78 or 86)
-	clockLabel.TextSize = portrait and 26 or 30
-	clockLabel.Position = UDim2.fromOffset(6, portrait and 23 or 25)
-	multiplierLabel.Position = UDim2.fromOffset(6, portrait and 58 or 64)
-	topActions.Position = portrait and UDim2.new(1, -150, 0, 76) or UDim2.new(1, -240, 0, 80)
-	topActions.Size = UDim2.fromOffset(portrait and 138 or 220, portrait and 92 or 34)
-	trailsButton.Size = UDim2.fromOffset(portrait and 66 or 78, 30)
-	helpButton.Size = UDim2.fromOffset(portrait and 64 or 62, 30)
-	setupButton.Size = UDim2.fromOffset(portrait and 138 or 66, 30)
-	helpButton.Position = UDim2.fromOffset(portrait and 74 or 85, 0)
-	setupButton.Position = UDim2.fromOffset(portrait and 0 or 154, portrait and 38 or 0)
-	-- Portrait puts controls below the top status row, clear of the central round clock.
-	if portrait then
-		topActions.Position = UDim2.new(1, -150, 0, 184)
-		restartButton.Position = UDim2.fromOffset(12, 184)
-	else
-		restartButton.Position = UDim2.fromOffset(compact and 12 or 20, compact and 89 or 102)
-	end
-	local bottom = UserInputService.TouchEnabled and 18 or 15
-	dashPanel.Size = UDim2.fromOffset(portrait and 214 or 280, 70)
-	dashPanel.Position = UDim2.new(0.5, portrait and -107 or -140, 1, -bottom - 70)
-	progressPanel.Size = UDim2.fromOffset(portrait and 240 or 330, 48)
-	progressPanel.Position = UDim2.new(0.5, portrait and -120 or -165, 1, -bottom - 130)
-	runLabel.Size = UDim2.fromOffset(portrait and 157 or 197, 18)
-	tip.Visible = width >= 760 and height >= 540
-	tip.Position = UDim2.new(0.5, -290, 1, -bottom - 164)
-	footer.Visible = width >= 1000
-	touchDash.Position = UDim2.new(1, -106, 1, portrait and -244 or -192)
-	accelerateButton.Position = UDim2.new(0.5, -118, 0, portrait and 270 or 124)
-	local modalWidth = math.min(540, width - 24)
-	local modalHeight = math.min(486, height - 24)
-	modal.Size = UDim2.fromOffset(modalWidth, modalHeight)
-	modal.Position = UDim2.new(0.5, -modalWidth / 2, 0.5, -modalHeight / 2)
-	modalTitle.TextSize = portrait and 19 or 24
-	local toastWidth = math.min(470, width - 24)
-	toast.Size = UDim2.fromOffset(toastWidth, 48)
-	toast.Position = UDim2.new(0.5, -toastWidth / 2, 0, portrait and 270 or 184)
-	countdown.Size = UDim2.fromOffset(math.min(420, width - 24), 100)
-	countdown.Position = UDim2.new(0.5, -math.min(420, width - 24) / 2, portrait and 0.43 or 0.32, -50)
+ local width,height=root.AbsoluteSize.X,root.AbsoluteSize.Y local narrow=width<540
+ local short=height<440
+ ui.launcher.Size=UDim2.fromOffset(narrow and 96 or 116,38)
+ ui.status.Size=UDim2.fromOffset(narrow and 256 or 328,52) ui.status.Position=UDim2.new(0.5,narrow and -128 or -164,0,narrow and 60 or 12)
+ ui.map.TextSize=narrow and 15 or 17 ui.phase.TextSize=narrow and 12 or 13
+ ui.energy.Size=UDim2.fromOffset(narrow and 222 or 258,62) ui.energy.Position=UDim2.new(0.5,narrow and -111 or -129,1,-76)
+ ui.balance.Position=UDim2.new(1,-140,0,12)
+ local mw,mh=math.min(608,width-20),math.min(510,height-24)
+ modal.Size=UDim2.fromOffset(mw,mh) modal.Position=UDim2.new(0.5,-mw/2,0.5,-mh/2)
+ ui.modalTitle.TextSize=narrow and 21 or 24
+ local tw=math.min(420,width-24) ui.toast.Size=UDim2.fromOffset(tw,44) ui.toast.Position=UDim2.new(0.5,-tw/2,0,126)
+ local vw=math.min(486,width-20) ui.vote.Size=UDim2.fromOffset(vw,138) ui.vote.Position=UDim2.new(0.5,-vw/2,1,-154)
+ local rw=math.min(388,width-24) ui.result.Size=UDim2.fromOffset(rw,108) ui.result.Position=UDim2.new(0.5,-rw/2,0.5,-54)
+ local sw=math.min(340,width-24) ui.spectator.Size=UDim2.fromOffset(sw,48) ui.spectator.Position=UDim2.new(0.5,-sw/2,1,-70)
+ accelerateButton.Position=UDim2.new(0.5,7,0,narrow and 122 or 78) ui.watch.Position=UDim2.new(0.5,-155,0,narrow and 122 or 78)
+ touchDash.Position=UDim2.new(1,-88,1,narrow and -235 or -194)
+ restartButton.Position=UDim2.new(0,14,1,UserInputService.TouchEnabled and -188 or -46)
+ ui.phase.Visible=not short
+ ui.map.Position=UDim2.fromOffset(26,5)
+ ui.clock.Position=UDim2.new(1,-88,0,9)
+ ui.run.Position=UDim2.fromOffset(12,5) ui.progress.Position=UDim2.new(1,-64,0,5)
+ ui.dash.Position=UDim2.fromOffset(12,26) ui.key.Position=UDim2.new(1,-90,0,26)
+ ui.balance.Size=UDim2.fromOffset(126,42)
+ restartButton.Size=UDim2.fromOffset(90,32) touchDash.Size=UDim2.fromOffset(70,58)
+ if short then
+  -- Short landscape keeps readable type by removing a secondary row, not scaling all text.
+  ui.launcher.Size=UDim2.fromOffset(92,32)
+  ui.status.Size=UDim2.fromOffset(220,38) ui.status.Position=UDim2.new(0.5,-110,0,narrow and 54 or 12)
+  ui.map.Size=UDim2.new(1,-99,0,25) ui.map.Position=UDim2.fromOffset(20,6) ui.map.TextSize=15
+  ui.accent.Size=UDim2.fromOffset(3,22) ui.accent.Position=UDim2.fromOffset(10,8)
+  ui.clock.Position=UDim2.new(1,-79,0,2) ui.clock.Size=UDim2.fromOffset(69,34) ui.clock.TextSize=21
+  ui.balance.Size=UDim2.fromOffset(110,38) ui.balance.Position=UDim2.new(1,-124,0,12) ui.coins.TextSize=16
+  ui.level.Position=UDim2.fromOffset(12,22)
+  ui.energy.Size=UDim2.fromOffset(190,46) ui.energy.Position=UDim2.new(0.5,-95,1,-58)
+  ui.run.Position=UDim2.fromOffset(10,1) ui.progress.Position=UDim2.new(1,-62,0,1)
+  ui.dash.Position=UDim2.fromOffset(10,20) ui.key.Position=UDim2.new(1,-78,0,20) ui.key.Size=UDim2.fromOffset(68,18)
+  ui.dash.Size=UDim2.new(1,-83,0,18) ui.dash.TextSize=14
+  restartButton.Size=UDim2.fromOffset(76,30) touchDash.Size=UDim2.fromOffset(60,50)
+ else
+  ui.map.Size=UDim2.new(1,-111,0,23) ui.accent.Size=UDim2.fromOffset(3,26) ui.accent.Position=UDim2.fromOffset(13,13)
+  ui.clock.Size=UDim2.fromOffset(73,34) ui.clock.TextSize=23 ui.coins.TextSize=18 ui.level.Position=UDim2.fromOffset(12,25)
+  ui.dash.Size=UDim2.new(1,-90,0,20) ui.dash.TextSize=15 ui.key.Size=UDim2.fromOffset(78,20)
+ end
 end
-table.insert(connections, root:GetPropertyChangedSignal("AbsoluteSize"):Connect(layout))
-layout()
-
-RunService:BindToRenderStep("DasherPresentation", Enum.RenderPriority.Camera.Value + 1, function(dt)
-	local now = os.clock()
-	local elapsed = now - receivedAt
-	local phase = snapshot.phase
-	local multiplier = phase == "Racing" and (snapshot.multiplier or 1) or 1
-	local timeLeft = math.max(0, (snapshot.timeLeft or 0) - elapsed * multiplier)
-	clockLabel.Text = phase == "Waiting" and "--:--" or timeText(math.ceil(timeLeft), false)
-	clockLabel.TextColor3 = phase == "Racing" and timeLeft <= 20 and C.gold or C.text
-	multiplierLabel.Text = multiplier > 1 and string.format("%.1fx  ROUND PACE", multiplier) or "ROUND TIME"
-	multiplierLabel.TextColor3 = multiplier > 1 and C.gold or C.muted
-	countdown.Visible = phase == "Countdown"
-	countdown.Text = timeLeft > 0.7 and tostring(math.ceil(timeLeft)) or "GO"
-	local charge = math.clamp((now - localDashAt) / Config.DashCooldown, 0, 1)
-	local accepted = player:GetAttribute("DashAt")
-	if typeof(accepted) == "number" then charge = math.min(charge, math.clamp((workspace:GetServerTimeNow() - accepted) / Config.DashCooldown, 0, 1)) end
-	local enabled = phase == "Racing" and snapshot.racing and not snapshot.finished
-	dashFill.Size = UDim2.fromScale(enabled and charge or 0, 1)
-	dashTitle.TextColor3 = enabled and C.text or C.muted
-	dashCaption.Text = not enabled and (snapshot.finished and "COURSE COMPLETE" or "RACE STARTS SOON") or (charge >= 0.999 and "READY" or "RECHARGING")
-	dashFill.BackgroundColor3 = charge >= 0.999 and C.cyan or C.muted
-	touchDash.BackgroundColor3 = enabled and charge >= 0.999 and C.cyan or C.card
-	touchDash.TextColor3 = enabled and charge >= 0.999 and C.ink or C.muted
-	if snapshot.finished then
-		local resultTime = lastFinished and lastFinished.time
-		if not resultTime then
-			for _, result in ipairs(snapshot.finishers or {}) do if result.userId == player.UserId then resultTime = result.time break end end
-		end
-		runLabel.Text = "FINISHED  " .. timeText(resultTime or 0, true)
-	elseif enabled and type(snapshot.runStartedAt) == "number" then
-		runLabel.Text = "YOUR RUN  " .. timeText(workspace:GetServerTimeNow() - snapshot.runStartedAt, true)
-	else
-		runLabel.Text = snapshot.best and ("BEST  " .. timeText(snapshot.best, true)) or "FIND YOUR LINE"
-	end
-	local camera = workspace.CurrentCamera
-	if camera ~= lastCamera then
-		if lastCamera and lastCamera.Parent then lastCamera.FieldOfView = math.clamp(lastCamera.FieldOfView - cameraOffsetApplied, 1, 120) end
-		cameraOffsetApplied = 0
-		lastCamera = camera
-	end
-	if camera then
-		local baseFov = camera.FieldOfView - cameraOffsetApplied
-		cameraKick *= math.exp(-dt * 12)
-		cameraOffsetApplied = reducedMotion and 0 or cameraKick
-		camera.FieldOfView = math.clamp(baseFov + cameraOffsetApplied, 1, 120)
-	end
+table.insert(connections,root:GetPropertyChangedSignal("AbsoluteSize"):Connect(layout)) layout()
+local cameraCheckAt=0
+RunService:BindToRenderStep("DasherPresentation",Enum.RenderPriority.Camera.Value+1,function(dt)
+ local now=os.clock() local phase=snapshot.phase
+ local multiplier=phase=="Racing" and (snapshot.multiplier or 1) or 1
+ local timeLeft=math.max(0,(snapshot.timeLeft or 0)-(now-receivedAt)*multiplier)
+ ui.clock.Text=phase=="Waiting" and "--:--" or timeText(math.ceil(timeLeft),false)
+ ui.clock.TextColor3=phase=="Racing" and timeLeft<=20 and C.gold or C.text
+ if phase=="Racing" then ui.phase.Text=multiplier>1 and string.format("%.1fx CLOCK / RACE",multiplier) or "RACE IN PROGRESS" end
+ ui.countdown.Visible=phase=="Countdown" and not menuOpen ui.countdown.Text=timeLeft>0.7 and tostring(math.ceil(timeLeft)) or "GO"
+ local charge=math.clamp((now-localDashAt)/Config.DashCooldown,0,1) local accepted=player:GetAttribute("DashAt")
+ if typeof(accepted)=="number" then charge=math.min(charge,math.clamp((workspace:GetServerTimeNow()-accepted)/Config.DashCooldown,0,1)) end
+ local enabled=phase=="Racing" and snapshot.racing and not snapshot.finished and not snapshot.spectating
+ ui.energy.Visible=enabled and not menuOpen and not cinematic
+ ui.charge.Size=UDim2.fromScale(enabled and charge or 0,1) ui.charge.BackgroundColor3=charge>=0.999 and C.cyan or C.muted
+ ui.dash.Text=charge>=0.999 and "DASH READY" or string.format("REFILL %.1fs",(1-charge)*Config.DashCooldown)
+ touchDash.Visible=UserInputService.TouchEnabled and enabled and not menuOpen and not cinematic
+ touchDash.BackgroundColor3=enabled and charge>=0.999 and C.cyan or C.card touchDash.TextColor3=enabled and charge>=0.999 and C.ink or C.muted
+ restartButton.Visible=enabled and not menuOpen
+ ui.vote.Visible=phase=="Intermission" and #(snapshot.voteOptions or {})>0 and not menuOpen and not cinematic
+ ui.spectator.Visible=spectateTarget~=nil and not menuOpen
+ if enabled and type(snapshot.runStartedAt)=="number" then ui.run.Text=timeText(workspace:GetServerTimeNow()-snapshot.runStartedAt,true)
+ else ui.run.Text=snapshot.best and ("BEST "..timeText(snapshot.best,true)) or "FIND YOUR LINE" end
+ local camera=workspace.CurrentCamera
+ if camera~=lastCamera then
+  if lastCamera and lastCamera.Parent then lastCamera.FieldOfView=math.clamp(lastCamera.FieldOfView-cameraOffsetApplied,1,120) end
+  cameraOffsetApplied=0 lastCamera=camera
+ end
+ if camera then
+  if cinematic then
+   local frame=cinematic local alpha=math.clamp((now-frame.started)/frame.duration,0,1) local eased=alpha*alpha*(3-2*alpha)
+   camera.CameraType=Enum.CameraType.Scriptable camera.CFrame=CFrame.lookAt(frame.from:Lerp(frame.to,eased),frame.lookAt) camera.Focus=CFrame.new(frame.lookAt)
+   if alpha>=1 then restoreCamera() end
+  elseif spectateTarget and now-cameraCheckAt>0.25 then
+   cameraCheckAt=now local character=spectateTarget.Character local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+   local eligible=false for _,racer in ipairs(snapshot.racers or {}) do if racer.userId==spectateTarget.UserId and not racer.finished then eligible=true break end end
+   if not humanoid or humanoid.Health<=0 or not eligible then setSpectate(1)
+   else camera.CameraType=Enum.CameraType.Custom camera.CameraSubject=humanoid end
+  end
+  local baseFov=camera.FieldOfView-cameraOffsetApplied cameraKick*=math.exp(-dt*12)
+  cameraOffsetApplied=(reducedMotion or cinematic or spectateTarget) and 0 or cameraKick
+  camera.FieldOfView=math.clamp(baseFov+cameraOffsetApplied,1,120)
+ end
 end)
-
-player:SetAttribute("DasherClientReady", true)
-Action:FireServer("Ready")
-task.delay(1.2, function()
-	if gui.Parent and snapshot.phase == "Waiting" then Action:FireServer("Ready") end
+-- Kiosks expose the same pages without permanent screen clutter.
+task.spawn(function()
+ local lobby=workspace:WaitForChild("Lobby",15) if not lobby then return end
+ local kiosks=lobby:WaitForChild("Kiosks",10) if not kiosks then return end
+ for _,part in ipairs(kiosks:GetDescendants()) do
+  if part:IsA("BasePart") and ({Shop=true,Inventory=true,Quests=true,Leaderboard=true})[part.Name] then
+   local prompt=make("ProximityPrompt",part,{Name="DasherMenuPrompt",ActionText="Open",ObjectText=part.Name,KeyboardKeyCode=Enum.KeyCode.E,GamepadKeyCode=Enum.KeyCode.ButtonX,HoldDuration=0,MaxActivationDistance=11,RequiresLineOfSight=false})
+   table.insert(connections,prompt.Triggered:Connect(function(person) if not person or person==player then openMenu(part.Name) end end))
+  end
+ end
 end)
-task.delay(2, function()
-	if gui.Parent and not menuOpen then showToast("Jump + dash. Every fall sends you back. Open HELP for controls.", C.text, 7) end
+task.spawn(function()
+ for _=1,8 do local ok=pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList,false) end) if ok then break end task.wait(0.25) end
 end)
-
+player:SetAttribute("DasherClientReady",true) Action:FireServer("Ready")
+task.delay(1.2,function() if gui.Parent and snapshot.phase=="Waiting" then Action:FireServer("Ready") end end)
+task.delay(3,function() if gui.Parent and not introPlayed then playLobbyIntro() end end)
 script.Destroying:Connect(function()
-	stopDash(true)
-	for character in pairs(effects) do endEffect(character) end
-	for _, connection in ipairs(connections) do connection:Disconnect() end
-	for _, connection in ipairs(characterConnections) do connection:Disconnect() end
-	RunService:UnbindFromRenderStep("DasherPresentation")
-	ContextActionService:UnbindAction("DasherDash")
-	ContextActionService:UnbindAction("DasherRestart")
-	ContextActionService:UnbindAction("DasherHelp")
-	if lastCamera and lastCamera.Parent then lastCamera.FieldOfView = math.clamp(lastCamera.FieldOfView - cameraOffsetApplied, 1, 120) end
-	dashSound:Destroy()
-	finishSound:Destroy()
-	audioGroup:Destroy()
-	gui:Destroy()
+ stopDash(true) restoreCamera()
+ for character in pairs(effects) do endEffect(character) end
+ for _,connection in ipairs(connections) do connection:Disconnect() end
+ for _,connection in ipairs(characterConnections) do connection:Disconnect() end
+ RunService:UnbindFromRenderStep("DasherPresentation")
+ for _,name in ipairs({"DasherDash","DasherRestart","DasherMenu","DasherSpectate"}) do ContextActionService:UnbindAction(name) end
+ dashSound:Destroy() finishSound:Destroy() audioGroup:Destroy() gui:Destroy()
 end)

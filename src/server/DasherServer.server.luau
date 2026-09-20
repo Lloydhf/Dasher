@@ -11,7 +11,13 @@ local PhysicsService = game:GetService("PhysicsService")
 local shared = ReplicatedStorage:WaitForChild("Dasher")
 local Config = require(shared:WaitForChild("Config"))
 local ProfileStore = require(script.Parent:WaitForChild("ProfileStore"))
+local WeeklyLeaderboard = require(script.Parent:WaitForChild("WeeklyLeaderboard"))
+local RoundRules = require(script.Parent:WaitForChild("RoundRules"))
 local profiles = ProfileStore.new(Config)
+local weeklyLeaderboard = WeeklyLeaderboard.new()
+profiles.OnSaved = function(player, weekly)
+	weeklyLeaderboard:Queue(player, weekly)
+end
 
 local remotes = shared:FindFirstChild("Remotes") or Instance.new("Folder")
 remotes.Name = "Remotes"
@@ -51,7 +57,10 @@ local finishPart = nil
 local gates = {}
 local hazards = {}
 local stopping = false
-local mapIndex = 0
+local previousMap = nil
+local voteOptions, votes = {}, {}
+local spectating = {}
+local random = Random.new()
 local activeSince = 0
 local TEST_MODE = RunService:IsStudio() and workspace:GetAttribute("DasherTestMode") == true
 local timings = {
@@ -160,6 +169,23 @@ local function snapshot(player)
 	local record = roster[player]
 	local data = profiles:Get(player)
 	local description = Config.Maps[mapId]
+	local counts = RoundRules.Tally(voteOptions, votes)
+	local choices, racers = {}, {}
+	for _, id in voteOptions do
+		table.insert(choices, {id = id, name = Config.Maps[id].name, votes = counts[id]})
+	end
+	for racer, race in roster do
+		if racer.Parent == Players and not race.forfeited then
+			table.insert(racers, {
+				userId = racer.UserId, name = racer.Name, displayName = racer.DisplayName,
+				progress = race.finished and 1 or race.gate / math.max(1, #gates + 1),
+				finished = race.finished,
+			})
+		end
+	end
+	table.sort(racers, function(a, b)
+		return a.progress > b.progress or (a.progress == b.progress and a.userId < b.userId)
+	end)
 	return {
 		phase = phase,
 		mapId = mapId,
@@ -168,8 +194,13 @@ local function snapshot(player)
 		timeLeft = math.max(0, timeLeft),
 		multiplier = multiplier,
 		finishers = finishers,
-		racing = phase == "Racing" and record ~= nil and not record.finished,
+		racing = phase == "Racing" and record ~= nil and not record.finished and not record.forfeited,
 		finished = record ~= nil and record.finished or false,
+		forfeited = record ~= nil and record.forfeited or false,
+		spectating = spectating[player] == true,
+		racers = racers,
+		voteOptions = phase == "Intermission" and choices or {},
+		myVote = votes[player],
 		canAccelerate = phase == "Racing" and accelerationOwner == player and not accelerated and timeLeft > 12,
 		runStartedAt = record and record.runStartedAt or 0,
 		coins = data and data.coins or 0,
@@ -178,6 +209,8 @@ local function snapshot(player)
 		progress = record and (record.finished and 1 or record.gate / math.max(1, #gates + 1)) or 0,
 		best = data and data.best[mapId] or nil,
 		saveStatus = profiles:GetStatus(player),
+		progression = profiles:GetProgression(player),
+		leaderboard = weeklyLeaderboard:Snapshot(),
 	}
 end
 
@@ -186,6 +219,7 @@ local function sendState(player)
 		local record = roster[player]
 		player:SetAttribute("DasherProgress", record and (record.finished and 1 or record.gate / math.max(1, #gates + 1)) or 0)
 		player:SetAttribute("DasherFinished", record ~= nil and record.finished or false)
+		player:SetAttribute("DasherSpectating", spectating[player] == true)
 		State:FireClient(player, snapshot(player))
 	end
 end
@@ -205,7 +239,7 @@ local function addEntrant(player)
 	end
 	local timestamp = now()
 	roster[player] = {
-		roundId = roundId, gate = 0, finished = false,
+		roundId = roundId, gate = 0, finished = false, forfeited = false,
 		runStartedAt = phase == "Racing" and timestamp or 0,
 		lastGateAt = timestamp, lastDash = -math.huge,
 		lastReset = -math.huge, resetCount = 0,
@@ -219,7 +253,7 @@ end
 
 local function resetRun(player, reason)
 	local record = roster[player]
-	if phase ~= "Racing" or not record or record.finished or now() - record.lastReset < 0.45 then
+	if phase ~= "Racing" or not record or record.finished or record.forfeited or now() - record.lastReset < 0.45 then
 		return
 	end
 	record.lastReset = now()
@@ -263,7 +297,7 @@ end
 
 local function finishRun(player)
 	local record = roster[player]
-	if phase ~= "Racing" or not record or record.finished or record.gate ~= #gates
+	if phase ~= "Racing" or not record or record.finished or record.forfeited or record.gate ~= #gates
 		or not profiles:IsReady(player) or record.runStartedAt <= 0 then
 		return
 	end
@@ -280,6 +314,10 @@ local function finishRun(player)
 	local rank = #finishers + 1
 	local reward = Config.FinishReward + (Config.RankBonuses[rank] or 0)
 	profiles:AddCoins(player, reward)
+	local xp = profiles:RecordFinish(player, rank)
+	if weeklyLeaderboard.sessionOnly then
+		weeklyLeaderboard:Queue(player, profiles:Get(player).weekly)
+	end
 	local personalBest = profiles:SetBest(player, mapId, elapsed)
 	table.insert(finishers, {userId = player.UserId, name = player.DisplayName, time = elapsed, coins = reward})
 	if rank == 1 then
@@ -288,7 +326,7 @@ local function finishRun(player)
 	end
 	refreshLeaderstats(player)
 	tell(player, "Finish", personalBest and "New personal best!" or "Run complete!", {
-		time = elapsed, rank = rank, coins = reward, personalBest = personalBest,
+		time = elapsed, rank = rank, coins = reward, xp = xp, personalBest = personalBest,
 	})
 	teleport(player, lobbyCFrame(player), false)
 	broadcastState()
@@ -376,6 +414,21 @@ local function applyLighting(id)
 	Lighting.FogEnd = theme.fogEnd
 end
 
+local function applyLobbyLighting()
+	local theme = Config.Lobby
+	if type(theme) ~= "table" then
+		return
+	end
+	for key, property in {
+		clockTime = "ClockTime", ambient = "Ambient", outdoorAmbient = "OutdoorAmbient",
+		fogColor = "FogColor", fogStart = "FogStart", fogEnd = "FogEnd",
+	} do
+		if theme[key] ~= nil then
+			Lighting[property] = theme[key]
+		end
+	end
+end
+
 local function loadMap(id)
 	local templates = ServerStorage:WaitForChild("Maps")
 	local template = templates:FindFirstChild(id)
@@ -442,7 +495,7 @@ local function handleCharacter(player, character)
 	setCharacterMotion(player, false)
 	humanoid.Died:Once(function()
 		local record = roster[player]
-		if record and not record.finished then
+		if record and not record.finished and not record.forfeited then
 			record.gate = 0
 			record.lastDash = -math.huge
 			record.lastGateAt = now()
@@ -450,7 +503,7 @@ local function handleCharacter(player, character)
 		end
 	end)
 	local record = roster[player]
-	if (phase == "Racing" or phase == "Countdown") and record and not record.finished then
+	if (phase == "Racing" or phase == "Countdown") and record and not record.finished and not record.forfeited then
 		record.gate = 0
 		record.lastGateAt = now()
 		teleport(player, startCFrame(player), phase == "Countdown")
@@ -487,6 +540,9 @@ local function playerAdded(player)
 		end
 		player:SetAttribute("EquippedTrail", data.equipped)
 		refreshLeaderstats(player)
+		if status == "saved" or status == "session" then
+			weeklyLeaderboard:Queue(player, data.weekly)
+		end
 		if status == "error" then
 			tell(player, "Error", "Saved progress is unavailable. You can play, but this session will not be saved.")
 		end
@@ -518,18 +574,73 @@ local function allowAction(player, action)
 	return true
 end
 
-local knownActions = {Ready = true, Dash = true, Restart = true, Accelerate = true, Buy = true, Equip = true}
+local knownActions = {
+	Ready = true, Dash = true, Restart = true, Accelerate = true, Buy = true, Equip = true,
+	Vote = true, Spectate = true, ClaimDaily = true, ClaimWeekly = true,
+}
 Action.OnServerEvent:Connect(function(player, action, payload)
-	if type(action) ~= "string" or not knownActions[action] or not allowAction(player, action) then
+	if type(action) ~= "string" or not knownActions[action] then
+		return
+	end
+	-- Stopping a camera mode must work even immediately after entering it or when
+	-- the client discovers there are no valid targets. It grants no eligibility,
+	-- and an already stopped state performs no work, so repeated exits are inert.
+	if action == "Spectate" and payload == false then
+		if spectating[player] then
+			spectating[player] = false
+			sendState(player)
+		end
+		return
+	end
+	if not allowAction(player, action) then
 		return
 	end
 	if action == "Ready" then
+		sendState(player)
+	elseif action == "Vote" then
+		if phase ~= "Intermission" or not profiles:IsReady(player) or type(payload) ~= "string"
+			or #payload > 32 or not table.find(voteOptions, payload) then
+			return
+		end
+		votes[player] = payload
+		broadcastState()
+	elseif action == "Spectate" then
+		if type(payload) ~= "boolean" then
+			return
+		end
+		if payload and (phase ~= "Racing" or not profiles:IsReady(player)) then
+			return
+		end
+		local record = roster[player]
+		if payload and record and not record.finished and not record.forfeited then
+			record.forfeited = true
+			record.gate = 0
+			player:SetAttribute("IsRacing", false)
+			teleport(player, lobbyCFrame(player), false)
+			tell(player, "Toast", "Spectating until the next race. This run was forfeited.")
+		end
+		spectating[player] = payload
+		sendState(player)
+	elseif action == "ClaimDaily" or action == "ClaimWeekly" then
+		local ok, message
+		if action == "ClaimDaily" then
+			ok, message = profiles:ClaimDaily(player)
+		else
+			ok, message = profiles:ClaimWeekly(player)
+		end
+		if ok then
+			refreshLeaderstats(player)
+			task.spawn(function()
+				profiles:Save(player, false)
+			end)
+		end
+		tell(player, ok and "Reward" or "Error", message)
 		sendState(player)
 	elseif action == "Dash" then
 		local record = roster[player]
 		local _, root, humanoid = characterParts(player)
 		local timestamp = now()
-		if phase ~= "Racing" or not record or record.finished or not root or not humanoid or humanoid.Health <= 0
+		if phase ~= "Racing" or not record or record.finished or record.forfeited or not root or not humanoid or humanoid.Health <= 0
 			or not finiteVector(payload) or math.abs(payload.Y) > 0.05 or payload.Magnitude < 0.5 or payload.Magnitude > 1.5
 			or timestamp - record.lastDash < Config.DashCooldown - 0.06 then
 			tell(player, "DashDenied", "Dash is not ready.")
@@ -573,6 +684,8 @@ end)
 Players.PlayerAdded:Connect(playerAdded)
 Players.PlayerRemoving:Connect(function(player)
 	roster[player] = nil
+	votes[player] = nil
+	spectating[player] = nil
 	rateLimits[player] = nil
 	if connections[player] then
 		connections[player]:Disconnect()
@@ -597,7 +710,7 @@ RunService.Heartbeat:Connect(function(dt)
 		validationAccumulator = 0
 		local timestamp = now()
 		for player, record in roster do
-			if player.Parent == Players and not record.finished then
+			if player.Parent == Players and not record.finished and not record.forfeited then
 				validateRacer(player, record, timestamp)
 			end
 		end
@@ -616,6 +729,14 @@ task.spawn(function()
 				profiles:Save(player, false)
 			end)
 		end
+	end
+end)
+
+task.spawn(function()
+	while not stopping do
+		weeklyLeaderboard:Flush()
+		weeklyLeaderboard:Refresh()
+		task.wait(45)
 	end
 end)
 
@@ -646,23 +767,25 @@ local function runRounds()
 			break
 		end
 		phase = "Intermission"
+		applyLobbyLighting()
 		multiplier = 1
 		accelerated, accelerateAt, accelerationOwner = false, nil, nil
-		finishers, roster = {}, {}
+		finishers, roster, spectating, votes = {}, {}, {}, {}
 		for _, player in Players:GetPlayers() do
 			player:SetAttribute("IsRacing", false)
 			teleport(player, lobbyCFrame(player), false)
 		end
-		mapIndex = mapIndex % #Config.MapOrder + 1
-		mapId = Config.MapOrder[mapIndex]
+		voteOptions = RoundRules.ChooseOptions(Config.MapOrder, previousMap, random)
 		if not waitPhase(timings.intermission) then
 			continue
 		end
+		mapId = RoundRules.Resolve(voteOptions, votes, random) or Config.MapOrder[1]
 		if not loadMap(mapId) then
 			announce("The course is being prepared. Retrying shortly.")
 			task.wait(3)
 			continue
 		end
+		previousMap = mapId
 		roundId += 1
 		phase = "Countdown"
 		for _, player in Players:GetPlayers() do
@@ -695,7 +818,7 @@ local function runRounds()
 			for player, record in roster do
 				if player.Parent == Players then
 					entrants += 1
-					if not record.finished then
+					if not record.finished and not record.forfeited then
 						unfinished += 1
 					end
 				end
@@ -705,6 +828,8 @@ local function runRounds()
 			end
 		end
 		phase = "Results"
+		spectating = {}
+		applyLobbyLighting()
 		for _, player in Players:GetPlayers() do
 			player:SetAttribute("IsRacing", false)
 			teleport(player, lobbyCFrame(player), false)
@@ -717,4 +842,5 @@ task.spawn(runRounds)
 game:BindToClose(function()
 	stopping = true
 	profiles:Close()
+	weeklyLeaderboard:Close()
 end)
