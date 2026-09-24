@@ -1,12 +1,14 @@
 # DASHER · NEXT 0.2
 
+*Historical content preserved; navigation repaired on 24 September 2026. The download points to the original Next 0.2 commit and document links point to this archived version.*
+
 **Find your line. Save your dash. Finish together.**
 
 A competitive Roblox parkour racer directed by Kuzey, with implementation assistance from OpenAI Codex. Five long courses, a new social atrium, map voting, spectator cameras and cosmetic progression. Falls return to the start; there are no checkpoints.
 
 ## Play
 
-Download and extract **[Dasher-Studio.zip](Dasher-Studio.zip)**. Open the included **Dasher.rbxlx** in Roblox Studio with **File → Open from File**, then press **F5 / Play**. Alternatively, rebuild the place from this repository with `python tools/build.py`. The map is selected after a 20-second voting intermission. A round lasts up to six minutes. The first finisher may accelerate the shared countdown; individual times stay in real seconds.
+Download and extract **[Dasher-Studio.zip](https://github.com/Lloydhf/Dasher/blob/3aff37b20e115a993c8fbd434de2aebdc5b3b2ce/Dasher-Studio.zip?raw=true)**. Open the included **Dasher.rbxlx** in Roblox Studio with **File → Open from File**, then press **F5 / Play**. Alternatively, rebuild the place from this repository with `python tools/build.py`. The map is selected after a 20-second voting intermission. A round lasts up to six minutes. The first finisher may accelerate the shared countdown; individual times stay in real seconds.
 
 The editable place includes all source and geometry. No plugins, API keys, HTTP access or paid assets are required. Dasher-Studio.zip contains this release place and the Turkish quick-start guide. Test places are deliberately outside the release folder.
 
@@ -31,15 +33,15 @@ Before adding developer products, implement and test server-side receipts, dupli
 
 Studio uses temporary data even when API access is enabled. Published servers use the existing DasherProfiles_v1 store with schema migration, session locks and serialized updates. Existing coins and owned trails remain. Old short-course times are archived separately because routes are no longer comparable. Failed reads cannot replace saved progress with defaults.
 
-The weekly leaderboard uses memory in Studio and an ordered data store in published servers. Live cross-server persistence needs a controlled published test. See [verification notes](docs/TESTING.md).
+The weekly leaderboard uses memory in Studio and an ordered data store in published servers. Live cross-server persistence needs a controlled published test. See [verification notes](TESTING.md).
 
 ## Source and iteration
 
 src/shared/Config.luau controls balance. src/server owns rounds, voting, progression and ranking. src/client owns input, UI and cameras. tools/world.py generates editable parts; python tools/build.py embeds them in the place. No unreviewed Toolbox scripts are included.
 
-See [design and research](docs/NEXT-DESIGN.md), [map specification](docs/MAP-DESIGN.md), and [testing](docs/TESTING.md). Rebuild after source changes. Never upload files named QA or LOCAL_TEST_ONLY.
+See [design and research](NEXT-DESIGN.md), [map specification](MAP-DESIGN.md), and [testing](TESTING.md). Rebuild after source changes. Never upload files named QA or LOCAL_TEST_ONLY.
 
-For a portfolio introduction, read the [case study](docs/PORTFOLIO.md). A separate [onboarding research proposal](https://github.com/Lloydhf/game-design-research) asks when to present movement instructions; its A/B variants and participant study have not yet been implemented.
+For a portfolio introduction, read the [case study](PORTFOLIO.md). A separate [onboarding research proposal](https://github.com/Lloydhf/game-design-research) asks when to present movement instructions; its A/B variants and participant study have not yet been implemented.
 
 Publication verification on 20 September 2026 rebuilt the place, checked all six embedded source files and 6,122 unique instance references, and excluded the StudioQA script from the normal place. Earlier Studio results remain dated in the verification notes; Studio gameplay was not rerun during publication.
 
