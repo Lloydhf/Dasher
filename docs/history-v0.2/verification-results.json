@@ -1,0 +1,71 @@
+{
+  "version": "0.2.0",
+  "date": "2026-09-17",
+  "releaseChecks": 34,
+  "serverLogicChecks": 33,
+  "spectateRegressionChecks": 8,
+  "studioStructureChecks": 551,
+  "multiplayerAssertions": 16,
+  "primaryCourseFinishes": {
+    "Foundry": {
+      "time": 72.69913983345032,
+      "xp": 150,
+      "coins": 20,
+      "personalBest": true,
+      "rank": 1
+    },
+    "Neon": {
+      "time": 73.88205099105835,
+      "xp": 150,
+      "coins": 20,
+      "personalBest": true,
+      "rank": 1
+    },
+    "Skyline": {
+      "time": 78.7969868183136,
+      "xp": 150,
+      "coins": 20,
+      "personalBest": true,
+      "rank": 1
+    },
+    "Zenith": {
+      "time": 72.89649200439453,
+      "xp": 150,
+      "coins": 20,
+      "personalBest": true,
+      "rank": 1
+    },
+    "Grid": {
+      "time": 76.99676299095154,
+      "xp": 150,
+      "coins": 20,
+      "personalBest": true,
+      "rank": 1
+    }
+  },
+  "shortcutCourseFinishes": [
+    {
+      "Zenith": {
+        "time": 68.43087410926819,
+        "xp": 150,
+        "coins": 20,
+        "personalBest": true,
+        "rank": 1
+      }
+    },
+    {
+      "Zenith": {
+        "time": 67.34619688987732,
+        "xp": 150,
+        "coins": 20,
+        "personalBest": true,
+        "rank": 1
+      }
+    }
+  ],
+  "notes": [
+    "Studio-only data. No live cross-server save test or payment test.",
+    "Rapid spectate exit regression found in first multiplayer run, fixed and retested.",
+    "Traversal uses normal Humanoid physics. Timings do not represent new players."
+  ]
+}

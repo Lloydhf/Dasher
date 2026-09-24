@@ -47,4 +47,29 @@ function RoundRules.Resolve(options, votes, random)
 	return #tied > 0 and tied[random:NextInteger(1, #tied)] or nil
 end
 
+function RoundRules.SelectEntrants(players, lastPlayed, capacity)
+	local ordered = table.clone(players)
+	table.sort(ordered, function(a, b)
+		local lastA, lastB = lastPlayed[a.UserId] or -1, lastPlayed[b.UserId] or -1
+		return lastA < lastB or (lastA == lastB and a.UserId < b.UserId)
+	end)
+	while #ordered > capacity do table.remove(ordered) end
+	return ordered
+end
+
+function RoundRules.RaceStatus(roster, connected, remaining, elapsed)
+	local entrants, unfinished = 0, 0
+	for player, record in roster do
+		if connected(player) then
+			entrants += 1
+			if not record.finished and not record.forfeited then unfinished += 1 end
+		end
+	end
+	if remaining <= 0 then return true, "TimeUp", entrants, unfinished end
+	if elapsed >= 2 and unfinished == 0 then
+		return true, entrants > 0 and "AllFinished" or "NoRacers", entrants, unfinished
+	end
+	return false, nil, entrants, unfinished
+end
+
 return RoundRules

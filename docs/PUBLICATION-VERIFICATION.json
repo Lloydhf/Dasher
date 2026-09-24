@@ -1,8 +1,100 @@
 {
-  "date": "2026-09-20",
-  "build_bytes": 8221545,
-  "unique_instances": 6122,
-  "source_files_matched": 6,
-  "zip_sha256": "2cab174a43dea2a9a881b6b0a954091f303c6c00791b6811f80721a060866134",
-  "studio_rerun": false
+  "date": "2026-09-24",
+  "version": "0.5.0",
+  "sourcePackage": "Dasher-Ascent-0.5",
+  "productionPlaceSha256": "b643dd193ee79a5a63986d73621df74943d1ec15141999c009db143c963c0a2f",
+  "byteIdenticalRebuild": true,
+  "embeddedSourceMatches": 8,
+  "uniqueInstanceReferences": 3233,
+  "allGameplaySourcesCompile": true,
+  "qaScriptsInProductionPlace": 0,
+  "logicChecksPassed": 201,
+  "logicReports": {
+    "finish-regression-results.json": {
+      "version": "0.5.0",
+      "passed": 95,
+      "failed": 0,
+      "scope": "Actual server finish/entrant/round-loop functions and profile/rule modules under deterministic service mocks; not native10-client performance.",
+      "sourceSha256": {
+        "CourseMotion.luau": "991358b79345a928dfc10f77f56259aff3b5689a03945746550abb1ac41f8c76",
+        "DasherServer.server.luau": "894bc5da87d504581f7f68ec61aa69e9c7803b5997b9ee520fee8b5c7b44fe8b",
+        "ProfileStore.luau": "ebe195607a9a6ee701344f353008ceddbbab9b833a6470f2e6ee84286648dfb4",
+        "RoundRules.luau": "803f32660bc15e1f245a10141128a1da2834acc5ec900d6c6d444f1c655f3130",
+        "TowerRules.luau": "744f514e9d3668686296c0dd6e5d8a267b9f96a0cdab8a0ba700d679fed81af8",
+        "WeeklyLeaderboard.luau": "98f9fa92aa6ac011e41701150ff05e596eb93ec465f58c60ad3cfdd58a67bc86"
+      },
+      "harnessSha256": "fcc0afeb1593f9d54cb014c92a85bb4910546353ca0aa93a3197385d3c469ad3"
+    },
+    "movement-landing-results.json": {
+      "passed": 23,
+      "scope": "Actual teleport initialization, validateRacer validation prefix, groundSupport, refreshGround and TowerRules; controlled vector/raycast/clock inputs.",
+      "sourceHashes": {
+        "src/server/DasherServer.server.luau": "894bc5da87d504581f7f68ec61aa69e9c7803b5997b9ee520fee8b5c7b44fe8b",
+        "src/server/TowerRules.luau": "744f514e9d3668686296c0dd6e5d8a267b9f96a0cdab8a0ba700d679fed81af8"
+      },
+      "harnessSha256": "ddb559ec0f03df97c1ecfb65970d6a57b458e7df520af99b44b3232d5ebe0b98"
+    },
+    "moving-support-results.json": {
+      "passed": 30,
+      "failed": 0,
+      "scope": "Actual CourseMotion history and server groundSupport with deterministic rigid-transform/raycast mocks; native replication still requires Studio validation.",
+      "sourceHashes": {
+        "src/server/DasherServer.server.luau": "894bc5da87d504581f7f68ec61aa69e9c7803b5997b9ee520fee8b5c7b44fe8b",
+        "src/server/CourseMotion.luau": "991358b79345a928dfc10f77f56259aff3b5689a03945746550abb1ac41f8c76",
+        "src/server/TowerRules.luau": "744f514e9d3668686296c0dd6e5d8a267b9f96a0cdab8a0ba700d679fed81af8"
+      },
+      "harnessSha256": "bec1b204c5785325428749ce0ee0d4e301b2b7beaea4bcb2a45855d4a123154d"
+    },
+    "client-carry-results.json": {
+      "passed": true,
+      "checks": 35,
+      "clientSha256": "2237b2a847f92fc845590aa0ff4a4bcbcabf6e5e3aa316baad85937e950a7684",
+      "carryBlockSha256": "2496f866e7a8ac77a104957f208c5d9f84ba6f5b6d2443185069aef7d98e9c8f",
+      "harnessSha256": "245d971dac67e4037a2e28c2643d30621bcb1c318af6b1be3cfc1848c9cd5b2c",
+      "sourceFunctionsVerified": true,
+      "nativePhysicsTested": false,
+      "limitations": "Translation-only CFrames and deterministic downward AABB raycasts; no rotated movers, replication latency or full Roblox physics.",
+      "stdout": "PASS center contact carries actual platform delta\nPASS legitimate root-over-edge footprint still rides\nPASS diagonal footprint probe preserves real corner contact\nPASS outside0.8footprint cannot attach\nPASS diagonal outsidefootprint cannot attach\nPASS walking beyond previous edge releases carrier\nPASS Jump flag detaches before transport\nPASS Jumping state detaches before transport\nPASS upward airborne velocity detaches\nPASS downward airborne velocity detaches\nPASS pending Updraft request prevents stale-floor carry\nPASS approved impulse guard prevents stale-floor carry\nPASS finished racer cannot be transported\nPASS forfeited racer cannot be transported\nPASS lobby phase cannot be transported\nPASS dead racer cannot be transported\nPASS anchored countdown avatar cannot be transported\nPASS disappeared noncollidable floor cannot carry\nPASS unanchored objects cannot grant course carry\nPASS oversized authored travel is rejected\nPASS replicated single-step delta over8studs is rejected\nPASS step cannot exceed configured total travel\nPASS stationary dwell creates no artificial avatar movement\nPASS 6x6shuttle carries whole18studjourney without doubledelta\nPASS carrier preserves player-controlled movement across journey\nPASS oversized avatar retains0.8radiuscap\nPASS teleport detaches instead of dragging avatar back\nPASS non-floor ray normal cannot grant carry\nPASS buried feet below0.55tolerance cannot grant carry\nPASS loss of previous vertical contact detaches\nPASS R6 leg height participates in actual feet distance\nPASS R6 actual longer leg determines support height\nPASS a different shuttle at proposed landing cannot authorize original delta\nPASS static blocker on proposed contact cannot authorize carry\nPASS replacement avatar cannot inherit old character support\nTOTAL 35\n",
+      "stderr": ""
+    },
+    "client-checks.json": {
+      "checks": 18,
+      "passed": true,
+      "clientSha256": "2237b2a847f92fc845590aa0ff4a4bcbcabf6e5e3aa316baad85937e950a7684",
+      "harnessSha256": "b0327ee41e7183cc25cfc8208d17bf701bb1995488ce463a3a5a518f4a51fea6",
+      "sourceFunctionsVerified": true,
+      "details": "PASS 18 client readiness and ranking checks",
+      "nativeUiTested": false
+    }
+  },
+  "geometryTestsPassed": 3,
+  "authoredTransitionsChecked": 339,
+  "secretAndLocalPathScan": {
+    "scope": "repository files excluding Git internals and ignored test output",
+    "findings": 0
+  },
+  "nativeEvidence": {
+    "source": "Archived original gameplay task, 2026-09-24",
+    "revalidated": true,
+    "newNativeSessionDuringRefresh": false,
+    "artifact": "native05-1790245491",
+    "artifactSha256": "d6092000df259c9b299db6fb8b55f25b958e75c4beac61eaed47f2837902fe94",
+    "nonScriptGeometryIdentical": true,
+    "resets": 0,
+    "lifts": 24,
+    "runtimeScriptErrors": 0,
+    "towersFinished": [
+      "Helix",
+      "Reactor",
+      "Canopy"
+    ],
+    "canopyLimitation": "P064 landing was not observed: authoritative summit sensor contact ended the race first."
+  },
+  "robloxPublishedByThisRefresh": false,
+  "limitations": [
+    "No new native gameplay session during GitHub refresh",
+    "No real ten-client load test",
+    "No live persistence or Robux purchase test",
+    "No human difficulty, retention or physical mobile-device study"
+  ]
 }

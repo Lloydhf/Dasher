@@ -8,7 +8,8 @@ local ProfileStore = {}
 ProfileStore.__index = ProfileStore
 
 local SCHEMA = 2
-local COURSE_VERSION = 2
+local COURSE_VERSION = 5
+local LEGACY_MAPS = {Skyline = true, Neon = true, Grid = true, Foundry = true, Zenith = true, Helix = true, Canopy = true, Reactor = true}
 local LOCK_SECONDS = 180
 local MAX_COINS = 100000000
 local MAX_XP = 100000000
@@ -50,6 +51,10 @@ function ProfileStore.new(config)
 	self.dailyReward = config.DailyReward or DAILY_REWARD
 	self.weeklyTarget = config.WeeklyFinishTarget or WEEKLY_TARGET
 	self.weeklyReward = config.WeeklyReward or WEEKLY_REWARD
+	self.stageReward = config.StageReward or 3
+	self.stageXP = config.StageXP or 25
+	self.stageRound = nil
+	self.stageClaims = {} -- UserId keys survive disconnect/rejoin within this server round.
 	for _, cosmetic in config.Cosmetics do
 		self.cosmetics[cosmetic.id] = cosmetic
 	end
@@ -88,6 +93,18 @@ function ProfileStore:_sanitize(raw)
 		data.equipped = raw.equipped
 	end
 	local oldCourses = raw.courseVersion ~= self.courseVersion
+	-- Preserve the retired horizontal courses as history when changing map IDs.
+	-- A fixed allowlist keeps arbitrary saved keys out of the profile.
+	for id in LEGACY_MAPS do
+		local time = type(raw.best) == "table" and raw.best[id]
+		if oldCourses and finite(time) and time > 0 and time < 3600 then
+			data.legacyBest[id] = time
+		end
+		local legacy = type(raw.legacyBest) == "table" and raw.legacyBest[id]
+		if finite(legacy) and legacy > 0 and legacy < 3600 then
+			data.legacyBest[id] = legacy
+		end
+	end
 	if type(raw.best) == "table" then
 		for id in self.mapIds do
 			local time = raw.best[id]
@@ -291,6 +308,36 @@ function ProfileStore:RecordFinish(player, rank)
 	record.data.xp = math.min(MAX_XP, record.data.xp + gained)
 	record.revision += 1
 	return gained
+end
+
+function ProfileStore:BeginStageRound(roundToken)
+	if not finite(roundToken) or roundToken < 1 or roundToken % 1 ~= 0
+		or (self.stageRound ~= nil and roundToken <= self.stageRound) then
+		return false
+	end
+	self.stageRound, self.stageClaims = roundToken, {}
+	return true
+end
+
+function ProfileStore:GetStageProgress(player, roundToken)
+	return roundToken == self.stageRound and (self.stageClaims[player.UserId] or 0) or 0
+end
+
+function ProfileStore:RecordStage(player, roundToken, stage, totalStages)
+	if not self:IsReady(player) or roundToken ~= self.stageRound
+		or not finite(stage) or stage % 1 ~= 0 or not finite(totalStages)
+		or totalStages % 1 ~= 0 or totalStages < 1 or totalStages > 100
+		or stage < 1 or stage > totalStages or stage ~= (self.stageClaims[player.UserId] or 0) + 1 then
+		return false, 0, 0
+	end
+	local record = self.records[player]
+	-- Claim, coin credit and XP credit form one yield-free server transaction.
+	-- This ledger is separate from attempt gates, so restarts cannot farm rewards.
+	self.stageClaims[player.UserId] = stage
+	record.data.coins = math.clamp(record.data.coins + self.stageReward, 0, MAX_COINS)
+	record.data.xp = math.clamp(record.data.xp + self.stageXP, 0, MAX_XP)
+	record.revision += 1
+	return true, self.stageReward, self.stageXP
 end
 
 function ProfileStore:ClaimDaily(player)

@@ -1,6 +1,4 @@
--- Dasher: server-owned rounds, ordered route validation, rewards and profile state.
--- Movement is predicted by the owning client. This script validates it; it never
--- applies a second dash impulse, which would double the local movement.
+-- Ascent: independent tower climbs, one verified Updraft, moving terrain and stage rewards.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
@@ -13,6 +11,8 @@ local Config = require(shared:WaitForChild("Config"))
 local ProfileStore = require(script.Parent:WaitForChild("ProfileStore"))
 local WeeklyLeaderboard = require(script.Parent:WaitForChild("WeeklyLeaderboard"))
 local RoundRules = require(script.Parent:WaitForChild("RoundRules"))
+local TowerRules = require(script.Parent:WaitForChild("TowerRules"))
+local CourseMotion = require(script.Parent:WaitForChild("CourseMotion"))
 local profiles = ProfileStore.new(Config)
 local weeklyLeaderboard = WeeklyLeaderboard.new()
 profiles.OnSaved = function(player, weekly)
@@ -31,7 +31,7 @@ end
 local Action = remote("Action")
 local State = remote("State")
 local Feedback = remote("Feedback")
-local DashFX = remote("DashFX")
+local SkillFX = remote("SkillFX")
 
 Players.RespawnTime = 0.45
 pcall(function()
@@ -48,6 +48,10 @@ local accelerated = false
 local accelerateAt = nil
 local accelerationOwner = nil
 local finishers = {}
+local finishClaims = {}
+local lastPlayedRound = {}
+local roundEndReason = nil
+local finalSprint = false
 local roster = {}
 local connections = {}
 local rateLimits = {}
@@ -55,7 +59,13 @@ local activeMap = nil
 local startPart = nil
 local finishPart = nil
 local gates = {}
+local courseStages = {}
 local hazards = {}
+local boundsPart = nil
+local courseMotion = nil
+local groundParams = RaycastParams.new()
+groundParams.FilterType = Enum.RaycastFilterType.Include
+groundParams.RespectCanCollide = true
 local stopping = false
 local previousMap = nil
 local voteOptions, votes = {}, {}
@@ -63,11 +73,15 @@ local spectating = {}
 local random = Random.new()
 local activeSince = 0
 local TEST_MODE = RunService:IsStudio() and workspace:GetAttribute("DasherTestMode") == true
+local function testDuration(attribute, fallback)
+	local value = workspace:GetAttribute(attribute)
+	return TEST_MODE and type(value) == "number" and value > 0 and value < 3600 and value or fallback
+end
 local timings = {
-	intermission = TEST_MODE and 2 or Config.Intermission,
-	countdown = TEST_MODE and 1 or Config.Countdown,
-	round = TEST_MODE and 12 or Config.RoundDuration,
-	results = TEST_MODE and 2 or Config.ResultsDuration,
+	intermission = testDuration("TowerQAIntermission", TEST_MODE and 2 or Config.Intermission),
+	countdown = testDuration("TowerQACountdown", TEST_MODE and 1 or Config.Countdown),
+	round = testDuration("TowerQARoundDuration", TEST_MODE and 12 or Config.RoundDuration),
+	results = testDuration("TowerQAResultsDuration", TEST_MODE and 2 or Config.ResultsDuration),
 }
 
 local function now()
@@ -106,20 +120,36 @@ local function announce(message)
 	end
 end
 
+local function rootToFeet(root, humanoid)
+	local distance = root.Size.Y * 0.5 + humanoid.HipHeight
+	if humanoid.RigType == Enum.HumanoidRigType.R6 then
+		local leg = humanoid.Parent and humanoid.Parent:FindFirstChild("Left Leg")
+		distance += leg and leg:IsA("BasePart") and leg.Size.Y or 2
+	end
+	return distance
+end
+
 local function lobbyCFrame(player)
 	local lobby = workspace:FindFirstChild("Lobby")
 	local spawn = lobby and lobby:FindFirstChildWhichIsA("SpawnLocation", true)
 	local base = spawn and spawn.CFrame + Vector3.new(0, 4, 0) or CFrame.new(0, 28, 85)
 	local offset = (math.abs(player.UserId) % 5 - 2) * 2.2
-	return base * CFrame.new(offset, 0, 0)
+	local _, root, humanoid = characterParts(player)
+	local lift = root and humanoid and math.max(0, rootToFeet(root, humanoid) - 4.1) or 0
+	return base * CFrame.new(offset, lift, 0)
 end
 
 local function startCFrame(player)
 	if not startPart then
 		return lobbyCFrame(player)
 	end
-	local offset = (math.abs(player.UserId) % 5 - 2) * 1.6
-	return startPart.CFrame * CFrame.new(offset, 0, 0)
+	local slot = roster[player] and roster[player].spawnSlot or (math.abs(player.UserId) % 10 + 1)
+	local marker = activeMap and activeMap:FindFirstChild(string.format("Start%02d", slot), true)
+	local base = marker and marker:IsA("BasePart") and marker.CFrame
+		or startPart.CFrame * CFrame.new(((slot - 1) % 5 - 2) * 4, 0, slot <= 5 and -4 or 4)
+	local _, root, humanoid = characterParts(player)
+	local lift = root and humanoid and math.max(0, rootToFeet(root, humanoid) - 3.6) or 0
+	return base * CFrame.new(0, lift, 0)
 end
 
 local function setCharacterMotion(player, frozen)
@@ -147,12 +177,22 @@ local function teleport(player, target, frozen)
 	local data = roster[player]
 	if data then
 		data.lastPosition = target.Position
+		data.lastWorldPosition = target.Position
 		data.lastSample = now()
 		data.teleportAt = now()
 		data.teleportPosition = target.Position
 		data.graceUntil = now() + 0.55
 		data.travelCredit = 32
-		data.airSince = nil
+		data.airOriginY = target.Position.Y
+		-- Validation deliberately skips this fixed server-teleport grace. Start
+		-- its initial flight clock at that boundary, so a normal jump during
+		-- grace is not charged for unobserved ground time before takeoff.
+		-- Subsequent landings and approved Updrafts replace this clock normally.
+		data.airStartedAt = data.graceUntil
+		data.airLaunchSpeed = Config.JumpPower
+		data.ascentCredit = Config.JumpPower ^ 2 / (2 * workspace.Gravity) + 8
+		data.groundedSince = nil
+		data.impulsePendingUntil = nil
 	end
 	return true
 end
@@ -165,10 +205,30 @@ local function refreshLeaderstats(player)
 	end
 end
 
+local function altitudeFor(player, record)
+	local height = startPart and finishPart and math.max(1, finishPart.Position.Y - startPart.Position.Y) or 1
+	if not record then
+		return {current = 0, peak = 0, height = height, stage = 0, totalStages = #gates}, 0
+	end
+	local current = record.finished and height or (record.currentAltitude or 0)
+	return {
+		current = current, peak = record.peakAltitude or 0, height = height,
+		stage = record.gate, totalStages = #gates,
+		rewardedStages = profiles:GetStageProgress(player, roundId),
+	}, current / height
+end
+
+local function isActive(player, record)
+	local _, root, humanoid = characterParts(player)
+	return phase == "Racing" and record ~= nil and not record.finished and not record.forfeited
+		and root ~= nil and humanoid ~= nil and humanoid.Health > 0
+end
+
 local function snapshot(player)
 	local record = roster[player]
 	local data = profiles:Get(player)
 	local description = Config.Maps[mapId]
+	local altitude, progress = altitudeFor(player, record)
 	local counts = RoundRules.Tally(voteOptions, votes)
 	local choices, racers = {}, {}
 	for _, id in voteOptions do
@@ -178,7 +238,7 @@ local function snapshot(player)
 		if racer.Parent == Players and not race.forfeited then
 			table.insert(racers, {
 				userId = racer.UserId, name = racer.Name, displayName = racer.DisplayName,
-				progress = race.finished and 1 or race.gate / math.max(1, #gates + 1),
+				progress = select(2, altitudeFor(racer, race)), stage = race.gate,
 				finished = race.finished,
 			})
 		end
@@ -191,6 +251,9 @@ local function snapshot(player)
 		mapId = mapId,
 		mapName = description and description.name or mapId,
 		roundId = roundId,
+		roundEndReason = roundEndReason,
+		finalSprint = finalSprint,
+		raceCapacity = Config.MaxRacers or 10,
 		timeLeft = math.max(0, timeLeft),
 		multiplier = multiplier,
 		finishers = finishers,
@@ -206,7 +269,18 @@ local function snapshot(player)
 		coins = data and data.coins or 0,
 		owned = data and data.owned or {ice = true},
 		equipped = data and data.equipped or "ice",
-		progress = record and (record.finished and 1 or record.gate / math.max(1, #gates + 1)) or 0,
+		progress = progress, altitude = altitude,
+		stageRewarded = profiles:GetStageProgress(player, roundId),
+		abilities = {
+			updraftAt = record and record.lastUpdraft > 0 and record.lastUpdraft or 0,
+			updraftArmed = isActive(player, record) and (not record.updraftAirUsed
+				or (record.groundedSince ~= nil and now() - record.groundedSince >= Config.UpdraftGroundTime)),
+			updraftReadyAt = record and math.max(0, record.lastUpdraft + Config.UpdraftCooldown,
+				(record.updraftAirUsed and record.groundedSince) and record.groundedSince + Config.UpdraftGroundTime or 0) or 0,
+			updraftReady = isActive(player, record) and TowerRules.UpdraftReady(now(), record.lastUpdraft,
+				record.updraftAirUsed, record.groundedSince, Config.UpdraftCooldown, Config.UpdraftGroundTime),
+			updraftAirUsed = record and record.updraftAirUsed or false,
+		},
 		best = data and data.best[mapId] or nil,
 		saveStatus = profiles:GetStatus(player),
 		progression = profiles:GetProgression(player),
@@ -217,7 +291,10 @@ end
 local function sendState(player)
 	if player.Parent == Players then
 		local record = roster[player]
-		player:SetAttribute("DasherProgress", record and (record.finished and 1 or record.gate / math.max(1, #gates + 1)) or 0)
+		local altitude, progress = altitudeFor(player, record)
+		player:SetAttribute("DasherProgress", progress)
+		player:SetAttribute("DasherAltitude", altitude.current)
+		player:SetAttribute("DasherStage", altitude.stage)
 		player:SetAttribute("DasherFinished", record ~= nil and record.finished or false)
 		player:SetAttribute("DasherSpectating", spectating[player] == true)
 		State:FireClient(player, snapshot(player))
@@ -237,17 +314,33 @@ local function addEntrant(player)
 	if not profiles:IsReady(player) or roster[player] then
 		return
 	end
+	local connected, occupied = 0, {}
+	for entrant, race in roster do
+		if entrant.Parent == Players then
+			connected += 1
+			occupied[race.spawnSlot] = true
+		end
+	end
+	if connected >= (Config.MaxRacers or 10) then return end
+	local slot = 1
+	while occupied[slot] do slot += 1 end
 	local timestamp = now()
+	local priorFinish = finishClaims[player.UserId]
 	roster[player] = {
-		roundId = roundId, gate = 0, finished = false, forfeited = false,
+		roundId = roundId, gate = priorFinish and #gates or 0, finished = priorFinish ~= nil, forfeited = false,
+		spawnSlot = slot,
+		finishTime = priorFinish and priorFinish.time or nil,
 		runStartedAt = phase == "Racing" and timestamp or 0,
-		lastGateAt = timestamp, lastDash = -math.huge,
+		lastGateAt = timestamp,
 		lastReset = -math.huge, resetCount = 0,
 		lastSample = timestamp, travelCredit = 32,
+		currentAltitude = 0, peakAltitude = 0,
+		lastUpdraft = -math.huge, updraftAirUsed = false,
 	}
-	player:SetAttribute("IsRacing", phase == "Racing")
-	player:SetAttribute("DashAt", 0)
-	teleport(player, startCFrame(player), phase == "Countdown")
+	lastPlayedRound[player.UserId] = roundId
+	player:SetAttribute("IsRacing", phase == "Racing" and not priorFinish)
+	player:SetAttribute("UpdraftAt", 0)
+	teleport(player, priorFinish and lobbyCFrame(player) or startCFrame(player), phase == "Countdown" and not priorFinish)
 	sendState(player)
 end
 
@@ -259,20 +352,20 @@ local function resetRun(player, reason)
 	record.lastReset = now()
 	record.gate = 0
 	record.lastGateAt = now()
-	record.lastDash = -math.huge
+	record.updraftAirUsed = false
+	record.currentAltitude = 0
 	record.resetCount += 1
-	player:SetAttribute("DashAt", 0)
 	teleport(player, startCFrame(player), false)
 	tell(player, "Reset", reason or "Back to the start. You have this.", {reason = reason, count = record.resetCount})
 	sendState(player)
 end
 
--- Server-side swept box test catches fast dashes that cross a gate between samples.
+-- Swept boxes preserve gate and hazard detection between physics samples.
 local function intersectsBox(part, from, to, padding)
 	local a = part.CFrame:PointToObjectSpace(from)
 	local b = part.CFrame:PointToObjectSpace(to)
 	local direction = b - a
-	local extent = part.Size * 0.5 + Vector3.new(padding, padding, padding)
+	local extent = part.Size * 0.5 + (typeof(padding) == "Vector3" and padding or Vector3.new(padding, padding, padding))
 	local minT, maxT = 0, 1
 	for _, axis in {"X", "Y", "Z"} do
 		local origin, delta, limit = a[axis], direction[axis], extent[axis]
@@ -295,16 +388,39 @@ local function intersectsBox(part, from, to, padding)
 	return true
 end
 
+local function creditStages(player, record, completed, quiet)
+	local reached = TowerRules.ReachedStage(record.gate, completed, #gates)
+	if reached <= record.gate then return end
+	record.gate = reached
+	record.lastGateAt = now()
+	local coins, xp = 0, 0
+	-- Claims are stored by UserId outside the attempt record. Filling skipped
+	-- milestones is safe across falls, restarts and same-server reconnects.
+	for stage = profiles:GetStageProgress(player, roundId) + 1, reached do
+		local awarded, stageCoins, stageXP = profiles:RecordStage(player, roundId, stage, #gates)
+		if awarded then coins += stageCoins; xp += stageXP end
+	end
+	if coins > 0 or xp > 0 then
+		refreshLeaderstats(player)
+		if not quiet then
+			tell(player, "StageCompleted", "Sector " .. reached .. " cleared!", {stage = reached, coins = coins, xp = xp})
+		end
+	end
+	sendState(player)
+end
+
 local function finishRun(player)
 	local record = roster[player]
-	if phase ~= "Racing" or not record or record.finished or record.forfeited or record.gate ~= #gates
+	if phase ~= "Racing" or not record or record.finished or record.forfeited or finishClaims[player.UserId]
 		or not profiles:IsReady(player) or record.runStartedAt <= 0 then
 		return
 	end
 	local elapsed = now() - record.runStartedAt
-	local routeLength = horizontal(finishPart.Position - startPart.Position).Magnitude
-	-- Generous speed bound: a honest dash + run route is considerably slower.
-	if elapsed < routeLength / (Config.WalkSpeed + Config.DashSpeed * 0.48) then
+	local routeLength = (finishPart.Position - startPart.Position).Magnitude
+	-- Validated crown contact ends the run. Exact rest history must not reject a
+	-- legitimate Updraft shortcut; continuous movement validation still applies.
+	if not TowerRules.CanFinish(phase, record, profiles:IsReady(player), elapsed,
+		routeLength / math.max(Config.WalkSpeed, Config.UpdraftSpeed)) then
 		resetRun(player, "Route timing could not be verified. Try again.")
 		return
 	end
@@ -313,16 +429,21 @@ local function finishRun(player)
 	player:SetAttribute("IsRacing", false)
 	local rank = #finishers + 1
 	local reward = Config.FinishReward + (Config.RankBonuses[rank] or 0)
+	local result = {userId = player.UserId, name = player.DisplayName, time = elapsed, coins = reward, rank = rank}
+	finishClaims[player.UserId] = result
+	table.insert(finishers, result)
+	creditStages(player, record, #gates, true)
 	profiles:AddCoins(player, reward)
 	local xp = profiles:RecordFinish(player, rank)
 	if weeklyLeaderboard.sessionOnly then
 		weeklyLeaderboard:Queue(player, profiles:Get(player).weekly)
 	end
 	local personalBest = profiles:SetBest(player, mapId, elapsed)
-	table.insert(finishers, {userId = player.UserId, name = player.DisplayName, time = elapsed, coins = reward})
 	if rank == 1 then
 		accelerationOwner = player
-		announce(player.DisplayName .. " finished first. The clock can be accelerated!")
+		finalSprint = true
+		timeLeft = math.min(timeLeft, Config.FirstFinishGrace or 90)
+		announce(player.DisplayName .. " reached the crown! Final sprint: " .. math.ceil(timeLeft) .. " seconds.")
 	end
 	refreshLeaderstats(player)
 	tell(player, "Finish", personalBest and "New personal best!" or "Run complete!", {
@@ -330,6 +451,96 @@ local function finishRun(player)
 	})
 	teleport(player, lobbyCFrame(player), false)
 	broadcastState()
+end
+
+local supportOffsets = {
+	Vector3.zero, Vector3.new(1, 0, 0), Vector3.new(-1, 0, 0),
+	Vector3.new(0, 0, 1), Vector3.new(0, 0, -1),
+	Vector3.new(0.707, 0, 0.707), Vector3.new(-0.707, 0, 0.707),
+	Vector3.new(0.707, 0, -0.707), Vector3.new(-0.707, 0, -0.707),
+}
+
+local function groundSupport(root, humanoid, record, timestamp)
+	local verticalSpeed = root.AssemblyLinearVelocity.Y
+	if math.abs(verticalSpeed) >= 12 then return nil end
+	local feetDistance = rootToFeet(root, humanoid)
+	local radius = math.min(0.8, math.max(root.Size.X, root.Size.Z) * 0.4)
+	for _, offset in supportOffsets do
+		local result = workspace:Raycast(root.Position + offset * radius,
+			Vector3.new(0, -feetDistance - 0.55, 0), groundParams)
+		if result and TowerRules.GroundContact(result.Distance, feetDistance, result.Normal.Y, verticalSpeed) then
+			return result
+		end
+	end
+	if courseMotion and record and timestamp and not humanoid.Jump
+		and humanoid:GetState() ~= Enum.HumanoidStateType.Jumping
+		and (not record.impulsePendingUntil or timestamp >= record.impulsePendingUntil) then
+		return courseMotion:RecentSupport(root.Position, feetDistance, radius, supportOffsets,
+			verticalSpeed, math.max(0, timestamp - activeSince))
+	end
+	return nil
+end
+
+local function refreshGround(record, root, humanoid, timestamp, result)
+	-- Humanoids can stand with part of their footprint beyond a platform edge.
+	-- Center-only rays miss that genuine support and incorrectly expire flight.
+	local grounded = result ~= nil
+	if record.impulsePendingUntil and timestamp < record.impulsePendingUntil then
+		-- Do not mistake the approval's network round-trip for a fresh landing.
+		if root.AssemblyLinearVelocity.Y > 15 or root.Position.Y > record.airOriginY + 1.5 then
+			record.impulsePendingUntil = nil
+		elseif grounded then
+			return true, result.Instance
+		end
+	end
+	if grounded then
+		record.groundedSince = record.groundedSince or timestamp
+		if timestamp - record.groundedSince >= Config.UpdraftGroundTime then
+			record.updraftAirUsed = false
+		end
+		record.airOriginY = root.Position.Y
+		record.airStartedAt = timestamp
+		record.airLaunchSpeed = Config.JumpPower
+		record.ascentCredit = Config.JumpPower ^ 2 / (2 * workspace.Gravity) + 8
+	else
+		record.groundedSince = nil
+	end
+	return grounded, result and result.Instance or nil
+end
+
+local function updateCourseMotion(timestamp)
+	if not courseMotion then return end
+	local riders = {}
+	-- Check contact against the platform's old position before moving it. Merely
+	-- being near a shuttle never grants motion credit. The owner applies the
+	-- visual/physical carry locally so server CFrame writes cannot suppress jumping.
+	for player, record in roster do
+		if isActive(player, record) then
+			local character, root, humanoid = characterParts(player)
+			if finiteVector(root.Position) and finiteVector(root.AssemblyLinearVelocity)
+				and math.abs(root.AssemblyLinearVelocity.Y) < 12
+				and (not record.impulsePendingUntil or timestamp >= record.impulsePendingUntil) then
+				local hit = groundSupport(root, humanoid, record, timestamp)
+				local mover = hit and courseMotion.movingParts[hit.Instance]
+				if mover then
+					table.insert(riders, {root = root, record = record, mover = mover})
+				end
+			end
+		end
+	end
+	local deltas = courseMotion:Step(math.max(0, timestamp - activeSince))
+	for _, rider in riders do
+		local delta = deltas[rider.mover]
+		if delta and rider.root.Parent then
+			local displacement = delta.Position
+			local record = rider.record
+			-- Account only for independently verified server-authored translation.
+			-- No client delta is accepted, and no server character teleport occurs.
+			-- World-route samples remain untouched for gates and hazards.
+			if record.lastPosition then record.lastPosition += displacement end
+			if record.airOriginY then record.airOriginY += displacement.Y end
+		end
+	end
 end
 
 local function validateRacer(player, record, timestamp)
@@ -342,62 +553,70 @@ local function validateRacer(player, record, timestamp)
 		resetRun(player, "Movement reset.")
 		return
 	end
-	if position.Y < 3 or math.abs(position.X) > 110 or position.Y > 130
-		or position.Z > 50 or (finishPart and position.Z < finishPart.Position.Z - 65) then
-		resetRun(player, "Back to the start. Keep your momentum.")
+	local boundPosition = boundsPart and boundsPart.CFrame:PointToObjectSpace(position) or position
+	local extent = boundsPart and boundsPart.Size * 0.5 or Vector3.new(70, 300, 70)
+	if math.abs(boundPosition.X) > extent.X or math.abs(boundPosition.Z) > extent.Z
+		or math.abs(boundPosition.Y) > extent.Y then
+		resetRun(player, "Back to the base. Find your next landing.")
 		return
 	end
 	if record.graceUntil and timestamp < record.graceUntil then
 		return
 	end
 	local previous = record.lastPosition or position
+	local routePrevious = record.lastWorldPosition or previous
 	local dt = math.max(0.01, timestamp - record.lastSample)
 	local distance = horizontal(position - previous).Magnitude
-	-- Leaky movement budget absorbs replication bursts; accepted dashes add a
-	-- finite distance allowance rather than allowing arbitrary dash-speed movement.
-	record.travelCredit = math.min(40 + Config.WalkSpeed * math.max(0, dt - 0.4), record.travelCredit + Config.WalkSpeed * 1.28 * dt)
+	-- The leaky walking budget absorbs bounded replication bursts. Verified
+	-- platform travel was removed from the sample before reaching this point.
+	record.travelCredit = TowerRules.HorizontalBudget(record.travelCredit, dt, Config.WalkSpeed)
 	if distance > record.travelCredit + 2 then
 		resetRun(player, "Movement could not be verified. Starting fresh.")
 		return
 	end
 	record.travelCredit = math.max(0, record.travelCredit - distance)
-	if humanoid.FloorMaterial == Enum.Material.Air then
-		record.airSince = record.airSince or timestamp
-		if timestamp - record.airSince > 3.0 then
-			resetRun(player, "Back to the start.")
-			return
-		end
-	else
-		record.airSince = nil
+	local rise = math.max(0, position.Y - previous.Y)
+	record.ascentCredit = record.ascentCredit or Config.JumpPower ^ 2 / (2 * workspace.Gravity) + 8
+	local support = groundSupport(root, humanoid, record, timestamp)
+	local ceiling = TowerRules.BallisticCeiling(record.airOriginY or previous.Y,
+		record.airLaunchSpeed or Config.JumpPower, timestamp - (record.airStartedAt or timestamp), workspace.Gravity, 0.4)
+	-- A verified landing ends the previous flight, even when its replicated
+	-- arrival outlives that flight's clock. Contact never excuses excessive rise;
+	-- walking, bounds and ascent credit are still checked before ground refresh.
+	if rise > record.ascentCredit + 2 or (not support and position.Y > ceiling) then
+		resetRun(player, "Vertical movement could not be verified. Try again.")
+		return
 	end
+	record.ascentCredit = math.max(0, record.ascentCredit - rise)
+	local grounded, groundPart = refreshGround(record, root, humanoid, timestamp, support)
+	local current, peak = TowerRules.Altitude(position.Y, startPart.Position.Y, finishPart.Position.Y, record.peakAltitude)
+	record.currentAltitude, record.peakAltitude = current, peak
+	-- The lower-body volume catches ankle-height killbrick borders as well as
+	-- torso-height rotating bars; sampling only root/feet points misses the legs.
+	local feet = rootToFeet(root, humanoid)
+	local rootHalf = root.Size.Y * 0.5
+	local bodyOffset = Vector3.new(0, (feet - rootHalf) * 0.5, 0)
+	local bodyRadius = math.max(root.Size.X, root.Size.Z) * 0.45
+	local bodyPadding = Vector3.new(bodyRadius, (feet + rootHalf) * 0.5, bodyRadius)
 	for _, hazard in hazards do
-		local footOffset = Vector3.new(0, root.Size.Y * 0.5 + humanoid.HipHeight - 0.1, 0)
-		if hazard.Parent and (intersectsBox(hazard, previous, position, 1.05)
-			or intersectsBox(hazard, previous - footOffset, position - footOffset, 0.4)) then
+		if hazard.Parent and intersectsBox(hazard, routePrevious - bodyOffset, position - bodyOffset, bodyPadding) then
 			resetRun(player, "Back to the start. Watch the hazards.")
 			return
 		end
 	end
-	local nextGate = gates[record.gate + 1]
-	if nextGate and intersectsBox(nextGate, previous, position, 2.4) then
-		local gateOrigin = record.gate > 0 and gates[record.gate].Position or startPart.Position
-		local minTime = horizontal(nextGate.Position - gateOrigin).Magnitude / (Config.DashSpeed * 1.8)
-		if timestamp - record.lastGateAt < minTime then
-			resetRun(player, "Route timing could not be verified. Try again.")
-			return
-		end
-		record.gate += 1
-		record.lastGateAt = timestamp
+	-- Only a real landing on an authored course surface grants progress. A
+	-- jump apex, scenery contact or arbitrary reported altitude grants nothing.
+	-- Branches and intentional Updraft shortcuts can reach a higher milestone
+	-- without touching one particular rest in every earlier sector.
+	if grounded and courseStages[groundPart] ~= nil then
+		creditStages(player, record, courseStages[groundPart], false)
 	end
-	if finishPart and intersectsBox(finishPart, previous, position, 2.2) then
-		if record.gate == #gates then
-			finishRun(player)
-		else
-			resetRun(player, "Stay on the course to finish the race.")
-		end
+	if finishPart and intersectsBox(finishPart, routePrevious, position, 2.2) then
+		finishRun(player)
 		return
 	end
 	record.lastPosition = position
+	record.lastWorldPosition = position
 	record.lastSample = timestamp
 end
 
@@ -440,7 +659,9 @@ local function loadMap(id)
 	local mapStart = clone:FindFirstChild("Start")
 	local mapFinish = clone:FindFirstChild("Finish")
 	local folder = clone:FindFirstChild("Gates")
-	if not mapStart or not mapStart:IsA("BasePart") or not mapFinish or not mapFinish:IsA("BasePart") or not folder then
+	local bounds = clone:FindFirstChild("Bounds")
+	if not mapStart or not mapStart:IsA("BasePart") or not mapFinish or not mapFinish:IsA("BasePart")
+		or not folder or not bounds or not bounds:IsA("BasePart") then
 		clone:Destroy()
 		warn("[Dasher] Map contract incomplete for " .. id)
 		return false
@@ -451,6 +672,8 @@ local function loadMap(id)
 	clone.Name = "ActiveMap"
 	clone.Parent = workspace
 	activeMap, startPart, finishPart = clone, mapStart, mapFinish
+	boundsPart = bounds
+	groundParams.FilterDescendantsInstances = {clone}
 	gates = {}
 	for _, part in folder:GetChildren() do
 		if part:IsA("BasePart") then
@@ -460,15 +683,31 @@ local function loadMap(id)
 	table.sort(gates, function(a, b)
 		return a.Name < b.Name
 	end)
-	hazards = {}
-	local hazardFolder = clone:FindFirstChild("Hazards")
-	if hazardFolder then
-		for _, part in hazardFolder:GetDescendants() do
-			if part:IsA("BasePart") then
-				table.insert(hazards, part)
+	courseStages = {}
+	for _, part in clone:GetDescendants() do
+		if part:IsA("BasePart") then
+			local marker = part:FindFirstChild("CompletedStage")
+			if marker and marker:IsA("IntValue") and marker.Value >= 0 and marker.Value <= #gates then
+				courseStages[part] = marker.Value
 			end
 		end
 	end
+	hazards = {}
+	local hazardFolder = clone:FindFirstChild("Hazards")
+	if hazardFolder then
+		for _, item in hazardFolder:GetChildren() do
+			if item:IsA("BasePart") then
+				table.insert(hazards, item)
+			elseif item:IsA("Model") then
+				local motion, bar = item:FindFirstChild("Motion"), item:FindFirstChild("Bar")
+				if motion and motion:IsA("StringValue") and motion.Value == "Spinner"
+					and bar and bar:IsA("BasePart") then
+					table.insert(hazards, bar)
+				end
+			end
+		end
+	end
+	courseMotion = CourseMotion.new(clone)
 	mapId = id
 	applyLighting(id)
 	return true
@@ -497,9 +736,9 @@ local function handleCharacter(player, character)
 		local record = roster[player]
 		if record and not record.finished and not record.forfeited then
 			record.gate = 0
-			record.lastDash = -math.huge
+			record.currentAltitude = 0
+			record.updraftAirUsed = false
 			record.lastGateAt = now()
-			player:SetAttribute("DashAt", 0)
 		end
 	end)
 	local record = roster[player]
@@ -519,7 +758,7 @@ local function playerAdded(player)
 	end
 	player:SetAttribute("IsRacing", false)
 	player:SetAttribute("EquippedTrail", "ice")
-	player:SetAttribute("DashAt", 0)
+	player:SetAttribute("UpdraftAt", 0)
 	local stats = Instance.new("Folder")
 	stats.Name = "leaderstats"
 	stats.Parent = player
@@ -566,7 +805,7 @@ local function allowAction(player, action)
 		return false
 	end
 	limit.tokens -= 1
-	local interval = action == "Ready" and 0.25 or (action == "Dash" and 0.08 or 0.25)
+	local interval = 0.25
 	if timestamp - (limit.actions[action] or -math.huge) < interval then
 		return false
 	end
@@ -575,8 +814,9 @@ local function allowAction(player, action)
 end
 
 local knownActions = {
-	Ready = true, Dash = true, Restart = true, Accelerate = true, Buy = true, Equip = true,
+	Ready = true, Restart = true, Accelerate = true, Buy = true, Equip = true,
 	Vote = true, Spectate = true, ClaimDaily = true, ClaimWeekly = true,
+	Updraft = true,
 }
 Action.OnServerEvent:Connect(function(player, action, payload)
 	if type(action) ~= "string" or not knownActions[action] then
@@ -596,6 +836,33 @@ Action.OnServerEvent:Connect(function(player, action, payload)
 		return
 	end
 	if action == "Ready" then
+		sendState(player)
+	elseif action == "Updraft" then
+		local record = roster[player]
+		local _, root = characterParts(player)
+		local timestamp = now()
+		if not isActive(player, record) or not finiteVector(root.Position) or not finiteVector(root.AssemblyLinearVelocity)
+			or not TowerRules.UpdraftReady(timestamp, record.lastUpdraft,
+			record.updraftAirUsed, record.groundedSince, Config.UpdraftCooldown, Config.UpdraftGroundTime) then
+			tell(player, "SkillDenied", "Updraft needs a landing and its cooldown.", {skill = "Updraft"})
+			return
+		end
+		record.lastUpdraft = timestamp
+		record.updraftAirUsed = true
+		record.groundedSince = nil
+		record.airOriginY = root.Position.Y
+		record.airStartedAt = timestamp
+		record.airLaunchSpeed = Config.UpdraftSpeed
+		record.impulsePendingUntil = timestamp + 0.5
+		record.ascentCredit = math.min(60, (record.ascentCredit or 0) + Config.UpdraftSpeed ^ 2 / (2 * workspace.Gravity) + 8)
+		local horizontalSpeed = horizontal(root.AssemblyLinearVelocity)
+		if horizontalSpeed.Magnitude > (Config.WalkSpeed * 1.35) then
+			horizontalSpeed = horizontalSpeed.Unit * (Config.WalkSpeed * 1.35)
+		end
+		local velocity = horizontalSpeed + Vector3.new(0, Config.UpdraftSpeed, 0)
+		player:SetAttribute("UpdraftAt", timestamp)
+		tell(player, "Updraft", "", {at = timestamp, velocity = velocity})
+		SkillFX:FireAllClients("Updraft", {userId = player.UserId, position = root.Position, at = timestamp})
 		sendState(player)
 	elseif action == "Vote" then
 		if phase ~= "Intermission" or not profiles:IsReady(player) or type(payload) ~= "string"
@@ -636,21 +903,6 @@ Action.OnServerEvent:Connect(function(player, action, payload)
 		end
 		tell(player, ok and "Reward" or "Error", message)
 		sendState(player)
-	elseif action == "Dash" then
-		local record = roster[player]
-		local _, root, humanoid = characterParts(player)
-		local timestamp = now()
-		if phase ~= "Racing" or not record or record.finished or record.forfeited or not root or not humanoid or humanoid.Health <= 0
-			or not finiteVector(payload) or math.abs(payload.Y) > 0.05 or payload.Magnitude < 0.5 or payload.Magnitude > 1.5
-			or timestamp - record.lastDash < Config.DashCooldown - 0.06 then
-			tell(player, "DashDenied", "Dash is not ready.")
-			return
-		end
-		local direction = horizontal(payload).Unit
-		record.lastDash = timestamp
-		record.travelCredit = math.min(58, record.travelCredit + (Config.DashSpeed - Config.WalkSpeed) * Config.DashDuration * 1.35)
-		player:SetAttribute("DashAt", timestamp)
-		DashFX:FireAllClients(player, direction)
 	elseif action == "Restart" then
 		resetRun(player, "Fresh attempt. The clock keeps running.")
 	elseif action == "Accelerate" then
@@ -702,13 +954,15 @@ for _, player in Players:GetPlayers() do
 	playerAdded(player)
 end
 
-local stateAccumulator, validationAccumulator = 0, 0
+local stateAccumulator = 0
 RunService.Heartbeat:Connect(function(dt)
 	stateAccumulator += dt
-	validationAccumulator += dt
-	if phase == "Racing" and validationAccumulator >= 0.08 then
-		validationAccumulator = 0
+	if phase == "Racing" then
 		local timestamp = now()
+		updateCourseMotion(timestamp)
+		-- A queued jump can leave a narrow landing in less than 0.08 seconds.
+		-- Observe it at the physics cadence using the complete validation path,
+		-- rather than granting unverified ground credit or extra airborne time.
 		for player, record in roster do
 			if player.Parent == Players and not record.finished and not record.forfeited then
 				validateRacer(player, record, timestamp)
@@ -771,6 +1025,8 @@ local function runRounds()
 		multiplier = 1
 		accelerated, accelerateAt, accelerationOwner = false, nil, nil
 		finishers, roster, spectating, votes = {}, {}, {}, {}
+		finishClaims = {}
+		roundEndReason, finalSprint = nil, false
 		for _, player in Players:GetPlayers() do
 			player:SetAttribute("IsRacing", false)
 			teleport(player, lobbyCFrame(player), false)
@@ -787,8 +1043,9 @@ local function runRounds()
 		end
 		previousMap = mapId
 		roundId += 1
+		profiles:BeginStageRound(roundId)
 		phase = "Countdown"
-		for _, player in Players:GetPlayers() do
+		for _, player in RoundRules.SelectEntrants(Players:GetPlayers(), lastPlayedRound, Config.MaxRacers or 10) do
 			addEntrant(player)
 		end
 		if not waitPhase(timings.countdown) then
@@ -814,20 +1071,16 @@ local function runRounds()
 			end
 			timeLeft = math.max(0, timeLeft - (timestamp - previous) * multiplier)
 			previous = timestamp
-			local entrants, unfinished = 0, 0
-			for player, record in roster do
-				if player.Parent == Players then
-					entrants += 1
-					if not record.finished and not record.forfeited then
-						unfinished += 1
-					end
-				end
-			end
-			if entrants > 0 and unfinished == 0 and timestamp - activeSince > 2 then
+			local ended, reason = RoundRules.RaceStatus(roster, function(player)
+				return player.Parent == Players
+			end, timeLeft, timestamp - activeSince)
+			if ended then
+				roundEndReason = reason
 				break
 			end
 		end
 		phase = "Results"
+		roundEndReason = roundEndReason or (timeLeft <= 0 and "TimeUp" or "NoRacers")
 		spectating = {}
 		applyLobbyLighting()
 		for _, player in Players:GetPlayers() do
@@ -838,6 +1091,10 @@ local function runRounds()
 	end
 end
 
+-- The first lobby visit should already show what players will climb.
+-- This uses the same active-map slot; the voted tower replaces it at countdown.
+loadMap(Config.MapOrder[1])
+applyLobbyLighting()
 task.spawn(runRounds)
 game:BindToClose(function()
 	stopping = true

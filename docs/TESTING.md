@@ -1,37 +1,47 @@
-# Dasher 0.2 verification — 17 September 2026
+# Dasher Ascent 0.5 verification
 
-## Executed
+This document concerns CourseVersion 5 only. Prior 0.4 native playthrough and multiplayer results do not establish this version's playability.
 
-- All six production Luau sources compile with the official Luau compiler.
-- 34 release checks cover embedded-source parity, unique instance references, five map contracts, 24 gates and 74 primary platforms per map, disabled commerce, and absence of QA code in the release.
-- 33 standalone server assertions cover schema migration, session locking, failed reads, duplicate claims, UTC rollover, concurrent-save snapshots, ordered ranking updates and voting.
-- Roblox Studio ran 551 structure/progression/voting assertions successfully.
-- A Studio client physically traversed all five main routes using normal Humanoid movement and ordinary jumps. No teleports, health edits or server bypasses were used by the traversal bot. All five finishes were verified and rewarded by the normal server code.
+## Server and client checks
 
-| Route | Verified time | Coins | XP |
-| --- | ---: | ---: | ---: |
-| Cloudline | 78.80 s | 20 | 150 |
-| The Grid | 77.00 s | 20 | 150 |
-| Foundry | 72.70 s | 20 | 150 |
-| Zenith | 72.90 s | 20 | 150 |
-| Afterhours | 73.88 s | 20 | 150 |
+- **95 finish/lifecycle regressions:** extracted actual server functions, actual profile and rule modules, with deterministic service mocks. Covers skipped stage rests, once-only stage/finish rewards, reconnect claims, ten entrants and distinct slots, ten finishers, departures/forfeits, race expiry and subsequent rounds. This is not a native ten-client load test.
+- **23 movement integration cases:** actual teleport initialization and movement validation/ground-support functions under controlled vector, raycast and clock inputs. Covers narrow valid landings, expired hovering rejection, teleport grace, ascent/distance budgets, and the 0.12-second grounded recharge without bypassing the 3.25-second cooldown.
+- **18 client readiness/ranking checks:** actual client helper functions. Checks cooldown display/readiness boundaries and finish ordering. Does not substitute for rendered UI checks.
+- **30 moving-support checks:** actual server-authored shuttle history and ground-support functions, including the captured native failure pose. Recent support expires after 0.2 seconds and cannot excuse airborne ascent, stale geometry or a missing platform.
+- **35 client carry checks:** actual carrier code with deterministic transforms and raycasts. Includes valid edge/corner contact, the full 18-stud shuttle trip, player movement, jump/Updraft detachment, old-character cleanup and rejection of unrelated surfaces. These mocks do not simulate Roblox replication.
 
-These are automated experienced-route timings, not an estimate for first-time players. Cloudline includes deliberate fall and manual reset checks. Both reset progress while retaining the original race clock. A repeated dash attempt was blocked during cooldown.
+Reports in the original QA work directory bind their tested source and harness hashes. The portable harnesses are now included under [tests/](../tests/README.md); their 201 checks were rerun during the 24 September GitHub refresh against the unchanged production sources. The three geometry regression tests also passed. [PUBLICATION-VERIFICATION.json](PUBLICATION-VERIFICATION.json) records this refresh separately from the native evidence. Refresh any affected report after source changes.
 
-Menu, shop and quest presentation were inspected in Studio. Claiming the daily reward through the actual GUI raised the test balance by 25. The normal race HUD leaves most of the viewport clear; voluntarily opened menus and voting occupy more space. Physical phones/controllers have not been tested.
+## Native physics protocol
 
-## Multiplayer integration
+The local-only QA place embeds the unmodified production client/server and a separate input-driving harness. The harness drives normal Humanoid walking/jumping and requests the public Updraft action. It does not teleport the character, change physics, disable hazards or grant movement exemptions.
 
-Two Studio clients and a local server were used to exercise spectating, forfeiture, menus and optional dash forks. The first run found that an immediate spectate exit could be dropped by the action throttle. The server exit path was corrected, eight targeted regression assertions passed, and the two-client rerun passed all 16 integration assertions. These include immediate exit, correct camera subject, no forfeiture bypass, one daily grant, all ten shop entries, menu closure, results camera recovery and eligibility in the next round. Four optional dash forks were physically traversed in Zenith; the normal server verified the finish in 68.43 seconds. The same geometry pattern is used by the other maps; their optional forks were checked geometrically but not all individually traversed.
+The archived 24 September 2026 native run finished all three towers on its first attempt, with **zero resets, 24 approved Updrafts and zero game-script runtime errors** in the artifact-scoped Studio log. It traversed a representative first-sector alternate branch out-and-back, observed Results after a finish and entered the next race automatically.
 
-## Live limitations
+| Tower | Native completion time | Observed route coverage |
+| --- | ---: | --- |
+| Helix | 109.88 seconds | P001–P064 landings, followed by crown sensor contact |
+| Canopy | 107.85 seconds | P001–P063 landings; summit sensor contact during the final approach toward P064 |
+| Reactor | 109.88 seconds | P001–P064 landings, followed by crown sensor contact |
 
-Studio deliberately stores temporary data, including the weekly board. Real Roblox data-store migration, cross-server ranking updates, reconnect behavior and live network/device performance still need a controlled published test. No Robux products are enabled and no payment was tested. Team races and seasonal releases are future iterations.
+Canopy's broad finish sensor, including the existing 2.2-stud body-contact padding, intersects the final P063 approach toward P064. The server therefore completed the run before P064 landing. This is accepted summit-sensor contact under the existing finish contract; **a P064 landing was not observed on Canopy**. The verifier allows only this final-pad exception, checks the exact artifact geometry and final event sequence, and still requires every earlier landing and all eight Updrafts. No intermediate missing platform is excused.
 
-Player testing should cover early difficulty, whether a fall near the end feels fair, voluntary replay, motion comfort, touch controls, slow devices and simultaneous finish/disconnect cases. No retention or revenue improvement is claimed from these local tests.
+Only countdown is shortened to 5 seconds for QA. Intermission 18 seconds, results 10 seconds and the 420-second race limit match production. An optional walk to the shop NPC after completion is recorded separately from route verification.
 
-## Isolation
+**Status: native verification passed.** Artifact `native05-1790245491`, SHA256 `d6092000df259c9b299db6fb8b55f25b958e75c4beac61eaed47f2837902fe94`. Production place SHA256 `b643dd193ee79a5a63986d73621df74943d1ec15141999c009db143c963c0a2f`. `verify_native.py` checks source hashes, exact non-script geometry equivalence, the route coverage above, current-artifact runtime errors and lifecycle evidence. Prior-version and incomplete runs are rejected.
 
-Disposable test places live outside the release directory and all bot/test code is guarded by IsStudio. The normal place excludes StudioQA and traversal appendages. Do not publish a file named QA or LOCAL_TEST_ONLY. Open and publish the release Dasher.rbxlx only after reviewing it.
+Earlier attempts found an edge-rider replication issue on the smaller shuttle and an overhead collision at a narrow takeoff. The carrier and server support now share footprint-aware checks, with a strict 0.2-second history of actual server-authored shuttle poses. A clear jump lane and one Helix section rotation remove the overhead conflicts. The final run above uses those changes; earlier failed attempts are retained and are not counted as passes.
 
-Prior v0.1 documents are archived under history-v0.1 and are not evidence for this version.
+The optional post-completion smoke setup walked normally around the fountain to the shop NPC and logged `lobby_shop_ready` at a distance of 8.13 studs. This proves arrival within the prompt's 10-stud range; it does not by itself prove that the shop opened or a purchase succeeded.
+
+During the original gameplay task, Codex then visually tested the real shop and inventory in the same native Studio session: buying SOLAR for 120 coins reduced the earned balance from 132 to 12, automatically equipped SOLAR, and added it alongside ION in Inventory. Equipping ION and then SOLAR both updated successfully. This was an isolated Studio profile, not a live persistent purchase or Robux transaction.
+
+The separate UI smoke artifact `npc-ui-1790246402` used a 180-second intermission to leave time for the physical prompt test. It retained the production geometry and gameplay source, adding only the Studio test configuration and an ordinary Humanoid walking driver. The driver walked around the fountain to MILO, logged `npc_ready` at 7.59 studs and released controls. During that original task, Codex observed MILO's **E Browse** prompt, pressed E and visually confirmed that the **TRAIL STUDIO** shop drawer opened with the expected items and prices. This UI-only test did not replace the route artifact or change the production place.
+
+## Boundaries
+
+- No live publication, real Robux transaction or purchase receipt fulfillment was tested.
+- Studio uses isolated session profiles; live persistence must be checked separately after deployment.
+- Ten-player logic checks do not measure a real ten-client server's performance or network behavior.
+- Real mobile devices, controller hardware, unusual avatar bundles, high latency and player retention still need playtesting.
+- Automated traversal proves a possible route under the tested conditions. It cannot establish that every player will find the difficulty enjoyable or that every optional hazard phase was explored.

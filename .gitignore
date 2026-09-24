@@ -6,3 +6,5 @@ __pycache__/
 work/
 *.log
 Dasher-QA.rbxlx
+
+.test-output/

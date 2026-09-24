@@ -1,8 +1,8 @@
-"""Hand-authored Dasher environments, without external assets or executable code.
+"""Dasher Ascent: eight obstacle sectors, timed steps and rideable shuttles.
 
 build_world() returns Roblox XML instances for Workspace/Lobby and
 ServerStorage/Maps. COURSE_METADATA exposes the intended traversable routes.
-All decorative architecture is non-collidable; only route surfaces collide.
+Decorative art is non-collidable; route surfaces and the solid hurdle collide.
 """
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ def part(parent, name, pos, size, rgb, *, collide=False, material='smooth',
     return node
 
 
-def sign(parent, name, text, pos, size, *, bg=None, fg=None, face=2, yaw=0, text_size=42):
+def sign(parent, name, text, pos, size, *, bg=None, fg=None, face=2, yaw=0, text_size=42, title=False):
     p = part(parent, name, pos, size, bg or COLORS['ink'], yaw=yaw)
     gui = item('SurfaceGui', name+'Display', p)
     scalar(gui, 'token', 'Face', face)
@@ -99,8 +99,7 @@ def sign(parent, name, text, pos, size, *, bg=None, fg=None, face=2, yaw=0, text
     scalar(label, 'float', 'TextSize', text_size)
     scalar(label, 'bool', 'TextScaled', True)
     scalar(label, 'bool', 'TextWrapped', True)
-    # BuilderSansBold is official Enum.Font value 48, avoiding deprecated aliases.
-    scalar(label, 'token', 'Font', 48)
+    scalar(label, 'token', 'Font', 26 if title else 35)  # FredokaOne / Nunito
     scalar(label, 'token', 'TextXAlignment', 2)
     scalar(label, 'token', 'TextYAlignment', 1)
     udim = ET.SubElement(label.find('Properties'), 'UDim2', {'name': 'Size'})
@@ -138,392 +137,542 @@ def beam(parent, name, a, b, width, rgb, material='metal'):
     return node
 
 
-THEMES = {
-    'Skyline': dict(title='CLOUDLINE', number='01', surface=(219, 229, 234), base=(70, 91, 109), accent=(99, 222, 231), floor=(148, 182, 201)),
-    'Neon': dict(title='AFTERHOURS', number='02', surface=(53, 60, 81), base=(24, 28, 44), accent=(183, 137, 250), floor=(14, 19, 32)),
-    'Grid': dict(title='THE GRID', number='03', surface=(225, 233, 236), base=(78, 101, 117), accent=(104, 223, 207), floor=(35, 47, 65)),
-    'Foundry': dict(title='FOUNDRY', number='04', surface=(84, 86, 89), base=(36, 40, 49), accent=(255, 186, 92), floor=(38, 31, 26)),
-    'Zenith': dict(title='ZENITH', number='05', surface=(173, 189, 212), base=(36, 49, 75), accent=(167, 186, 255), floor=(18, 26, 46)),
+THEMES={
+ 'Helix':dict(title='HELIX',base=(47,54,80),accent=(142,181,255),surface=(223,231,249),colors=[(116,148,229),(157,117,227),(86,189,219),(230,164,96),(133,193,143),(212,116,158),(122,168,236),(200,179,237)]),
+ 'Canopy':dict(title='CANOPY',base=(69,85,66),accent=(183,236,130),surface=(233,228,198),colors=[(145,195,106),(92,180,143),(214,182,104),(147,175,93),(108,193,117),(217,163,109),(108,175,168),(190,206,118)]),
+ 'Reactor':dict(title='REACTOR',base=(47,58,70),accent=(99,225,236),surface=(218,230,232),colors=[(100,157,204),(95,194,202),(226,149,74),(165,132,208),(199,108,118),(98,180,211),(181,198,99),(160,190,212)]),
 }
+SECTOR_TYPES=('precision','angle_beams','shuttle','blink','wall_ledge','shuttle','blink','crown_steps')
+SECTOR_NAMES=('SPLIT STEPS','CROSSBEAMS','TRANSFER','PHASE SHIFT','SKYLINE','CROSSING','TEMPO','FINAL ASCENT')
+GRAVITY, WALK_SPEED, JUMP_SPEED, UPDRAFT_SPEED = 196.2, 20, 52, 88
 
 
-def deck(parent, name, x, z, width, depth, top, theme, *, shortcut=False):
-    """A compact kit: seven parts per normal landing rather than twenty detail parts."""
-    t = THEMES[theme]
-    accent = COLORS['gold'] if shortcut else t['accent']
-    model = item('Model', name, parent)
-    part(model, 'Walkable', (x, top-1, z), (width, 2, depth), t['surface'], collide=True,
-         material='concrete' if theme == 'Skyline' else 'smooth')
-    part(model, 'Foundation', (x, top-2.3, z), (width-.7, .6, depth-.7), t['base'], material='metal')
-    part(model, 'LandingEdge', (x, top+.035, z+depth/2-.22), (width-.6, .07, .28), accent, material='neon')
-    for side in (-1, 1):
-        part(model, 'EdgeInset', (x+side*(width/2-.18), top+.035, z), (.12, .07, depth-.6), t['base'])
-        beam(model, 'Direction', (x+side*.75, top+.09, z+.2), (x, top+.09, z-.8), .11, accent, 'neon')
-    if shortcut:
-        part(model, 'RiskStripe', (x, top+.045, z-depth/2+.22), (width-.6, .09, .28), COLORS['gold'], material='neon')
-        # A text cue distinguishes dash forks even on Foundry's warm palette.
-        sign(model, 'DashRoute', 'DASH', (x,top-.8,z+depth/2+.05),
-             (width-.3,1.2,.08), fg=COLORS['gold'])
-    return model
+def value(parent,cls,name,val):
+    node=item(cls,name,parent)
+    if cls=='Vector3Value':vector(node,'Value',val)
+    else:scalar(node,'string' if cls=='StringValue' else ('int' if cls=='IntValue' else 'double'),'Value',val)
+    return node
+
+
+def rotate(x,z,quarter):
+    for _ in range(quarter%4):x,z=-z,x
+    return x,z
+
+
+def local_point(p,x,z):
+    a=math.radians(p.get('yaw',0));c,s=math.cos(a),math.sin(a)
+    dx,dz=x-p['x'],z-p['z']
+    return c*dx-s*dz,s*dx+c*dz
+
+
+def corners(p):
+    a=math.radians(p.get('yaw',0));c,s=math.cos(a),math.sin(a)
+    return [(p['x']+c*x+s*z,p['z']-s*x+c*z) for x,z in [(-p['width']/2,-p['depth']/2),(p['width']/2,-p['depth']/2),(p['width']/2,p['depth']/2),(-p['width']/2,p['depth']/2)]]
+
+
+def point_segment_distance(p,a,b):
+    dx,dz=b[0]-a[0],b[1]-a[1]
+    t=max(0,min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dz)/(dx*dx+dz*dz)))
+    return math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dz)
+
+
+def inside(p,x,z,padding=0):
+    lx,lz=local_point(p,x,z)
+    return abs(lx)<p['width']/2+padding and abs(lz)<p['depth']/2+padding
+
+
+def rectangle_gap(a,b):
+    ac,bc=corners(a),corners(b)
+    separated=False
+    for p in (a,b):
+        yaw=math.radians(p.get('yaw',0))
+        for axis in ((math.cos(yaw),-math.sin(yaw)),(math.sin(yaw),math.cos(yaw))):
+            av=[x*axis[0]+z*axis[1] for x,z in ac];bv=[x*axis[0]+z*axis[1] for x,z in bc]
+            if max(av)<min(bv) or max(bv)<min(av):separated=True
+    if not separated:return 0
+    return min(point_segment_distance(v,edge[i],edge[(i+1)%4]) for points,edge in ((ac,bc),(bc,ac)) for v in points for i in range(4))
+
+
+def motion_positions(p):
+    if p.get('motion')!='Shuttle':return [p]
+    tx,ty,tz=p['travel']
+    return [dict(p,x=p['x']+tx*f,z=p['z']+tz*f,top=p['top']+ty*f) for f in (0,.25,.5,.75,1)]
+
+
+def clear_headroom(route):
+    # Centre and departure lane must never be under the next sector. A normal
+    # R15 avatar needs >6.2 studs; lift launch needs the full ballistic apex.
+    for standing in route:
+        limit=25.7 if standing['kind']=='updraft_launch' else 6.2
+        for s in motion_positions(standing):
+            for upper in route:
+                if standing['name']==upper['name']:continue
+                for u in motion_positions(upper):
+                    clearance=u['top']-1.25-s['top']
+                    if 0<clearance<limit and inside(u,s['x'],s['z'],1.1):return False
+    return True
+
+
+def transition_metrics(previous,target):
+    # Exit from the far dock, board at the near dock. All distances use actual
+    # rectangle edges, not just centre distance (important on narrow beams).
+    previous=motion_positions(previous)[-1]
+    rise=target['top']-previous['top'];gap=rectangle_gap(previous,target)
+    speed=UPDRAFT_SPEED if target['updraft'] else JUMP_SPEED
+    disc=speed*speed-2*GRAVITY*rise
+    flight=(speed+math.sqrt(disc))/GRAVITY if disc>=0 else 0
+    return dict(from_name=previous['name'],to_name=target['name'],rise=rise,gap=gap,
+                flight=flight,range=WALK_SPEED*flight,landing_margin=WALK_SPEED*flight-gap,
+                updraft=target['updraft'])
+
+
+def approach_points(previous,target,inset=.5,obstacles=None):
+    """Return edge takeoff/landing hints, inset into both real support faces.
+
+    These are advisory metadata for native QA, not runtime teleport targets.
+    Taking every jump from slab centre would incorrectly reject these deliberate
+    running jumps. The returned horizontal distance must fit the actual parabola.
+    """
+    authored_previous=previous
+    previous=motion_positions(previous)[-1]
+    # Beam kill rails occupy the side margins. Plan the jump through the safe
+    # centre lane, not through a physically solid but lethal slab corner.
+    if previous.get('index') in (10,38):previous=dict(previous,depth=previous['depth']-2.4)
+    if target.get('index') in (10,38):target=dict(target,depth=target['depth']-2.4)
+    ac,bc=corners(previous),corners(target)
+    candidates=[]
+    for reverse,(pts,edges) in enumerate(((ac,bc),(bc,ac))):
+        for p in pts:
+            for i,a in enumerate(edges):
+                b=edges[(i+1)%4];dx,dz=b[0]-a[0],b[1]-a[1]
+                t=max(0,min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dz)/(dx*dx+dz*dz)))
+                q=(a[0]+t*dx,a[1]+t*dz)
+                candidates.append((math.dist(p,q),q,p) if reverse else (math.dist(p,q),p,q))
+    _,a,b=min(candidates)
+    def pull_in(point,p):
+        dx,dz=p['x']-point[0],p['z']-point[1];length=math.hypot(dx,dz)
+        return (point[0]+dx/max(length,1)*inset,point[1]+dz/max(length,1)*inset)
+    a,b=pull_in(a,previous),pull_in(b,target)
+    hint=dict(takeoff=(a[0],previous['top'],a[1]),landing=(b[0],target['top'],b[1]),distance=math.dist(a,b))
+    return clear_jump_approach(authored_previous,target,hint,obstacles) if obstacles is not None else hint
+
+
+def capsule_hits_surface(p,x,feet,z):
+    """Conservative upright R15 capsule against an oriented 1.25-stud slab."""
+    radius,height=1.0,5.5
+    lx,lz=local_point(p,x,z)
+    dx=max(0,abs(lx)-p['width']/2);dz=max(0,abs(lz)-p['depth']/2)
+    low,high=feet+radius,feet+height-radius
+    dy=max(0,p['top']-1.25-high,low-p['top'])
+    return dx*dx+dz*dz+dy*dy<radius*radius-.001
+
+
+def jump_corridor(previous,target,takeoff,landing,obstacles):
+    """Check ground approach, 120Hz ballistic capsule, and landing exit.
+
+    Updraft first clears the receiver height vertically, as a human can do with
+    Q before moving toward it. The returned delay makes this requirement visible
+    to QA instead of silently assuming a horizontally instantaneous takeoff.
+    """
+    speed=UPDRAFT_SPEED if target['updraft'] else JUMP_SPEED
+    rise=target['top']-previous['top'];disc=speed*speed-2*GRAVITY*rise
+    flight=(speed+math.sqrt(disc))/GRAVITY
+    delay=(speed-math.sqrt(speed*speed-2*GRAVITY*(rise+.5)))/GRAVITY if target['updraft'] else 0
+    distance=math.dist(takeoff,landing)
+    if distance>WALK_SPEED*(flight-delay)-.05:return False,'horizontal_range',delay
+    for a,b,y in (((previous['x'],previous['z']),takeoff,previous['top']),
+                  (landing,(target['x'],target['z']),target['top'])):
+        for step in range(17):
+            f=step/16;x=a[0]+(b[0]-a[0])*f;z=a[1]+(b[1]-a[1])*f
+            for slab in obstacles:
+                if slab['name'] not in (previous['name'],target['name']) and capsule_hits_surface(slab,x,y,z):
+                    return False,'ground_overhang:'+slab['name'],delay
+    steps=math.ceil(flight*120)
+    for step in range(1,steps):
+        time=flight*step/steps;f=min(1,max(0,time-delay)*WALK_SPEED/max(distance,.01))
+        x=takeoff[0]+(landing[0]-takeoff[0])*f;z=takeoff[1]+(landing[1]-takeoff[1])*f
+        feet=previous['top']+speed*time-GRAVITY*time*time/2
+        for slab in obstacles:
+            if capsule_hits_surface(slab,x,feet,z):return False,'jump_obstruction:'+slab['name'],delay
+    return True,'clear',delay
+
+
+def approach_grid(p):
+    width,depth=p['width'],p['depth']
+    if p.get('index') in (10,38):depth-=2.4
+    halfx,halfz=max(.1,width/2-.5),max(.1,depth/2-.5)
+    angle=math.radians(p.get('yaw',0));c,s=math.cos(angle),math.sin(angle)
+    return [(p['x']+c*x*halfx+s*z*halfz,p['z']-s*x*halfx+c*z*halfz)
+            for x in (-1,-.66,-.33,0,.33,.66,1) for z in (-1,-.66,-.33,0,.33,.66,1)]
+
+
+def clear_jump_approach(authored_previous,target,hint,all_surfaces):
+    previous=motion_positions(authored_previous)[-1]
+    speed=UPDRAFT_SPEED if target['updraft'] else JUMP_SPEED
+    max_top=previous['top']+speed*speed/(2*GRAVITY)+5.5
+    # Use the actual far/near dock for this pair, not every duplicate phase of
+    # the same moving slab. Other movers are swept across their full travel.
+    slabs=[previous,target]+[p for other in all_surfaces if other['name'] not in (previous['name'],target['name'])
+                              for p in motion_positions(other) if previous['top']-1<p['top']<max_top+1.25]
+    a=(hint['takeoff'][0],hint['takeoff'][2]);b=(hint['landing'][0],hint['landing'][2])
+    clear,reason,delay=jump_corridor(previous,target,a,b,slabs)
+    if clear:return dict(hint,corridor_checked=True,horizontal_delay=delay,corridor_adjusted=False)
+    rise=target['top']-previous['top']
+    flight=(speed+math.sqrt(speed*speed-2*GRAVITY*rise))/GRAVITY
+    max_range=WALK_SPEED*(flight-delay)-.05
+    candidates=sorted((math.dist(a,b),a,b) for a in approach_grid(previous) for b in approach_grid(target) if math.dist(a,b)<max_range)
+    for distance,a,b in candidates:
+        clear,_,delay=jump_corridor(previous,target,a,b,slabs)
+        if clear:
+            return dict(takeoff=(a[0],previous['top'],a[1]),landing=(b[0],target['top'],b[1]),distance=distance,
+                        corridor_checked=True,horizontal_delay=delay,corridor_adjusted=True,original_obstruction=reason)
+    raise AssertionError(('No clear avatar jump corridor',previous['name'],target['name'],reason))
+
+
+def transitions_valid(route):
+    for previous,target in zip(route,route[1:]):
+        m=transition_metrics(previous,target)
+        if target['updraft']:
+            if not 12<=m['rise']<=15 or m['gap']>8:return False
+        else:
+            if not -1<=m['rise']<=3.5 or m['gap']>8.60001:return False
+        if m['landing_margin']<1.1:return False
+        if inside(target,previous['x'],previous['z'],.8):return False
+    return True
+
+
+def template(theme,kind):
+    if kind=='shuttle':
+        return [(0,16),(0,29),(31,29),(45,29),(43,14),(30,8),(17,3),(0,0)],[(11,9),(22,17)],[]
+    if theme=='Canopy':
+        return [(12,14),(25,17),(32,5),(45,3),(42,-12),(29,-19),(16,-11),(0,0)],[(15,-2),(27,-8)],[(33,16),(20,20),(8,13)]
+    if theme=='Reactor':
+        return [(0,16),(13,22),(26,22),(42,22),(44,7),(30,5),(17,0),(0,0)],[(13,1),(25,8)],[(29,34),(17,25),(7,14)]
+    return [(0,16),(12,24),(24,16),(40,16),(43,1),(31,-6),(18,-7),(0,0)],[(15,-4),(27,3)],[(28,27),(16,22),(5,14)]
+
+
+def authored_sector(theme,sector,quarter):
+    kind=SECTOR_TYPES[sector-1]
+    points,pre,post=template(theme,kind)
+    if theme=='Canopy' and sector==1:points[0]=(15,19)
+    base=22+(sector-1)*26
+    heights=(1.5,3.5,5,19,20.5,22,24,26)
+    route=[];alts=[]
+    for step,((px,pz),height) in enumerate(zip(points,heights),1):
+        x,z=rotate(px,pz,quarter)
+        w=d=5.5 if step==1 else 5
+        padkind='precision'
+        if step in (6,7):w=d=6
+        if kind=='angle_beams' and step in (2,6):w,d,padkind=7,3.2,'balance'
+        if kind=='wall_ledge' and step in (1,5):w,d,padkind=4,10,'wall_ledge'
+        if kind=='wall_ledge' and theme=='Reactor' and step==5:w=5
+        if kind=='crown_steps' and step in (1,2,5):w=d=4.8
+        if step==3:w=d=10;padkind='updraft_launch'
+        if step==4:w=d=10;padkind='updraft_receiver'
+        if step==8:w=d=14;padkind='sector_rest'
+        if kind=='shuttle' and step==2:w=d=6;padkind='shuttle'
+        if kind=='blink' and step in (5,6):padkind='blink'
+        p=dict(name=f'P{(sector-1)*8+step:03d}',index=(sector-1)*8+step,x=x,z=z,top=base+height,width=w,depth=d,
+               yaw=-quarter*90,section=sector,completed_stage=sector if step==8 else sector-1,
+               updraft=step==4,kind=padkind,sector_type=kind,branch='main')
+        if padkind=='shuttle':
+            tx,tz=rotate(18,0,quarter);p.update(motion='Shuttle',travel=(tx,0,tz),period=8,dwell=1.2,phase=0)
+        if padkind=='blink':p.update(motion='Blink',period=6.6,on_duration=4.8,warning_duration=1.1,phase=0 if step==5 else .65)
+        route.append(p)
+    for position,xy in enumerate(pre+post,1):
+        before=position<=len(pre);step=position if before else position-len(pre)
+        height=(1.5,3.5)[step-1] if before else (20.5,22.5,24)[step-1]
+        x,z=rotate(*xy,quarter)
+        w=5 if kind=='shuttle' or (theme=='Reactor' and not before) else 4.5
+        # A genuinely narrower, shorter route; it is not a duplicate arrow on
+        # the same slabs. In timed sectors the alternate remains static.
+        p=dict(name=f'B{sector:02d}_{position:02d}',index=200+sector*10+position,x=x,z=z,top=base+height,width=w,depth=w,
+               yaw=-quarter*90,section=sector,completed_stage=sector-1,updraft=False,kind='shortcut',sector_type=kind,
+               branch='alternate',branch_phase='before_lift' if before else 'after_lift')
+        alts.append(p)
+    return route,alts
+
+
+def branch_chains(previous,main,alts):
+    pre=[p for p in alts if p['branch_phase']=='before_lift']
+    post=[p for p in alts if p['branch_phase']=='after_lift']
+    return [[previous]+pre+[main[2]], *([[main[3]]+post+[main[7]]] if post else [])]
+
+
+def course_routes(theme):
+    launch=dict(name='LaunchDeck',index=0,x=0,z=0,top=22,width=24,depth=18,yaw=0,section=0,completed_stage=0,updraft=False,kind='launch',branch='shared')
+    preferences={'Helix':(0,1,2,3,0,0,2,3),'Canopy':(1,2,3,0,1,2,3,0),'Reactor':(2,3,0,1,2,3,0,1)}[theme]
+    def choose(sector,route,alternates,branch_data):
+        if sector==9:
+            for cx,cz in ((0,-21),(-21,0),(0,21),(21,0)):
+                crown=dict(name='CrownDeck',index=65,x=cx,z=cz,top=232,width=24,depth=20,yaw=0,section=8,completed_stage=8,updraft=False,kind='crown',branch='shared')
+                if transitions_valid([route[-1],crown]) and clear_headroom(route[-8:]+alternates[-5:]+[crown]):
+                    return route+[crown],alternates,branch_data
+            return None
+        pref=preferences[sector-1]
+        for q in [pref]+[n for n in range(4) if n!=pref]:
+            main,alts=authored_sector(theme,sector,q)
+            chains=branch_chains(route[-1],main,alts)
+            if not transitions_valid([route[-1]]+main) or not all(transitions_valid(chain) for chain in chains):continue
+            recent=[p for p in route+alternates if p['top']>=main[0]['top']-32]
+            if not clear_headroom(recent+main+alts):continue
+            desc=dict(section=sector,title=SECTOR_NAMES[sector-1],type=SECTOR_TYPES[sector-1],quarter=q,
+                      main=[p['name'] for p in [route[-1]]+main],
+                      alternatives=[dict(label='Precision bypass' if n==0 else 'Outer shortcut',
+                                         chain=[p['name'] for p in chain],
+                                         bypasses=[p['name'] for p in (main[:2] if n==0 else main[4:7])]) for n,chain in enumerate(chains)])
+            result=choose(sector+1,route+main,alternates+alts,branch_data+[desc])
+            if result:return result
+        return None
+    result=choose(1,[launch],[],[])
+    assert result,f'No feasible authored arrangement for {theme}'
+    return result
 
 
 def course_route(theme):
-    """24 three-jump sections; every primary jump is possible without using Dash.
-
-    Differences in width, lateral line and elevation produce four acts of a race.
-    The step length never triples: routes grow through new landings, not scaling.
-    """
-    route = [dict(index=0, x=0, z=0, width=28, depth=24, top=22, name='LaunchDeck')]
-    offsets = {
-        'Skyline': (0, -4, 3, 5, -3, 0),
-        'Neon': (-3, 4, -5, 3, -3, 4),
-        'Grid': (0, 4, -4, 0, -4, 4),
-        'Foundry': (3, -4, 0, 4, -3, 0),
-        'Zenith': (-3, 0, 4, -4, 3, 0),
-    }
-    for section in range(24):
-        act = section // 6
-        bend = offsets[theme][section % 6]
-        for step in range(3):
-            previous = route[-1]
-            # Broad landing every third jump gives space to line up the next act.
-            depth = (9, 10, 16)[step]
-            gap = (3.5, 4.5, 3.5)[step] + (0, .5, 1, 1)[act]
-            width = (15, 13, 21)[step] - (0, 1, 2, 3)[act]
-            top = (22, 22.5, 23)[step] + (1 if section % 4 == 2 else 0)
-            x = (bend, -bend*.4, 0)[step]
-            if section in (4, 10, 16, 22) and step < 2:
-                x = 14 if section % 12 < 6 else -14
-                width = 15
-                gap = 3.5
-            # Grid's square silhouette is retained without narrow unfair gaps.
-            if theme == 'Grid' and step < 2:
-                width = max(10, width)
-                depth = width
-            p = dict(index=len(route), x=x, z=previous['z']-(previous['depth']+depth)/2-gap,
-                     width=width, depth=depth, top=top, name=f'Section{section+1:02d}_Pad{step+1}',
-                     section=section+1, act=act+1, gate=section+1 if step == 2 else None, gap=gap)
-            route.append(p)
-    previous = route[-1]
-    route.append(dict(index=73, x=0, z=previous['z']-(previous['depth']+26)/2-4,
-                      width=30, depth=26, top=23, name='FinishDeck', gap=4))
-    return route
+    return course_routes(theme)[0]
 
 
-def arch(parent, name, x, z, top, width, accent, text):
-    group = item('Model', name, parent)
-    for side in (-1, 1):
-        part(group, 'Upright', (x+side*width/2, top+7, z), (1.3, 14, 1.5), COLORS['ink'], material='metal')
-        part(group, 'Light', (x+side*(width/2-.1), top+7, z+.78), (.13, 12, .07), accent, material='neon')
-    sign(group, 'Header', text, (x, top+14.1, z), (width+2, 3.2, 1.5), fg=accent)
-    part(group, 'HeaderLine', (x, top+12.4, z+.8), (width+1, .12, .08), accent, material='neon')
-    return group
+def recovery_ledges(route,alternates):
+    results=[]
+    for section in range(1,9):
+        receiver=route[(section-1)*8+4]
+        options=[]
+        for axis in ('x','z'):
+            for side in (-1,1):
+                p=dict(name=f'Catch{section:02d}',index=100+section,x=receiver['x'],z=receiver['z'],top=receiver['top']-2,
+                       width=9,depth=8,yaw=0,section=section,completed_stage=section-1,updraft=False,kind='catch',rejoin=receiver['name'])
+                p[axis]+=side*((10+p['width' if axis=='x' else 'depth'])/2+4.5)
+                if clear_headroom(route+alternates+results+[p]) and transitions_valid([p,dict(receiver,updraft=False)]):options.append(p)
+        assert options,('No clear physical fall recovery',section)
+        results.append(min(options,key=lambda p:abs(p['x'])+abs(p['z'])))
+    return results
+
+
+def platform(parent,p,theme,*,catch=False):
+    t=THEMES[theme];model=item('Model',p['name'],parent)
+    x,z,y,w,d,yaw=p['x'],p['z'],p['top'],p['width'],p['depth'],p.get('yaw',0)
+    tone=t['colors'][max(0,p['section']-1)]
+    if p['kind'] in ('launch','sector_rest','crown'):tone=t['surface']
+    if p['kind']=='shortcut':tone=tuple(min(255,int(c*.78+42)) for c in tone)
+    if catch:tone=tuple(int(c*.65+255*.35) for c in tone)
+    walkable=part(model,'Walkable',(x,y-.625,z),(w,1.25,d),tone,collide=True,yaw=yaw)
+    value(walkable,'IntValue','CompletedStage',p['completed_stage'])
+    part(model,'Underside',(x,y-1.42,z),(max(.5,w-.35),.35,max(.5,d-.35)),t['base'],yaw=yaw)
+    if p['kind']=='shortcut':
+        part(model,'RiskStripe',(x,y+.025,z),(min(1.2,w-1),.05,min(1.2,d-1)),(255,227,144),yaw=45-quarter_yaw(p))
+    if p['kind'] in ('updraft_launch','updraft_receiver'):
+        part(model,'UpdraftInset',(x,y+.035,z),(3,.07,3),t['accent'],yaw=45)
+        for side in (-1,1):beam(model,'UpChevron',(x+side*.7,y+.12,z+.55),(x,y+.12,z-.5),.12,t['base'],'smooth')
+    if p['kind'] in ('sector_rest','crown'):
+        sign(model,'SectorNumber',f'{p["section"]:02d}',(x,y-.52,z+d/2+.04),(3,.9,.06),bg=t['base'],fg=(239,243,241))
+        for side in (-1,1):part(model,'RestStripe',(x+side*(w/2-.35),y+.025,z),(.12,.05,d-1),t['accent'])
+    if p.get('motion'):
+        value(model,'StringValue','Motion',p['motion']);value(model,'NumberValue','Period',p['period']);value(model,'NumberValue','Phase',p['phase'])
+        if p['motion']=='Shuttle':
+            value(model,'Vector3Value','Travel',p['travel']);value(model,'NumberValue','Dwell',p['dwell'])
+            part(model,'RideInset',(x,y+.04,z),(w-1,.08,d-1),(94,221,249),yaw=yaw)
+            part(model,'RideCentre',(x,y+.09,z),(1.8,.04,1.8),(227,249,255),yaw=yaw)
+        else:
+            value(model,'NumberValue','OnDuration',p['on_duration']);value(model,'NumberValue','WarningDuration',p['warning_duration'])
+            part(model,'StateIndicator',(x,y+.045,z),(w-.6,.09,.35),(248,226,119),yaw=yaw,material='neon')
+    return model
+
+
+def quarter_yaw(p):return p.get('yaw',0)
+
+
+def circle_ring(parent,name,center,radius,width,color,*,segments=24,material='smooth',start=0,end=math.tau):
+    x,y,z=center
+    for n in range(segments):
+        a=start+(end-start)*n/segments;b=start+(end-start)*(n+1)/segments
+        beam(parent,name,(x+math.cos(a)*radius,y,z+math.sin(a)*radius),(x+math.cos(b)*radius,y,z+math.sin(b)*radius),width,color,material)
+
+
+def add_obstacles(props,hazards,route,alternates,theme):
+    t=THEMES[theme];records=[]
+    # Real danger beside two thin beams, never fake red decorative collision.
+    for index in (10,38):
+        p=route[index]
+        angle=math.radians(p.get('yaw',0));c,s=math.cos(angle),math.sin(angle)
+        for side in (-1,1):
+            off=(0,side*(p['depth']/2+.3));size=(p['width'],.45,.25)
+            pos=(p['x']+c*off[0]+s*off[1],p['top']+.7,p['z']-s*off[0]+c*off[1])
+            part(hazards,f'Edge{index}_{side}',pos,size,(250,106,97),material='neon',touch=True,yaw=p.get('yaw',0))
+            records.append(dict(name=f'Edge{index}_{side}',kind='kill_edge',platform=p['name'],position=pos,size=size))
+    # Optional shortcuts feature sweeping arms: take the outer static chain or
+    # time a jump through the inner half. Main chains remain unambiguous.
+    for section in (2,7):
+        p=next(p for p in alternates if p['section']==section and p['branch_phase']=='before_lift')
+        # Sweep only the outside half; a 2-stud safe centre lane is retained.
+        options=[]
+        for a in range(16):
+            angle=a*math.tau/16;x,z=p['x']+9*math.cos(angle),p['z']+9*math.sin(angle)
+            distance=min((rectangle_gap(dict(x=x,z=z,width=1,depth=1,yaw=0),q) for q in route if abs(q['top']-p['top'])<7),default=50)
+            options.append((distance,x,z))
+        distance,x,z=max(options)
+        center=(x,p['top']+1.1,z)
+        spinner=item('Model',f'Spinner{section:02d}',hazards)
+        value(spinner,'StringValue','Motion','Spinner');value(spinner,'NumberValue','AngularSpeed',.8);value(spinner,'NumberValue','Phase',section*.4)
+        part(spinner,'Center',center,(.3,.3,.3),t['base'],transparency=1)
+        part(spinner,'Bar',center,(16,.5,.6),(255,137,89),touch=True,material='neon')
+        part(props,'SpinnerPivot',(x,p['top']-.1,z),(1.2,1.2,1.2),t['base'],shape=0)
+        records.append(dict(name=f'Spinner{section:02d}',kind='spinner',center=center,size=(16,.5,.6),angular_speed=.8,section=section,main_clearance=distance))
+    return records
+
+
+def architecture(parent,route,theme):
+    t=THEMES[theme]
+    if theme=='Helix':
+        for n,y in enumerate((21,73,125,177,239)):
+            circle_ring(parent,'OrbitalFrame',(0,y,0),58,.7,(123,145,190),segments=16,start=.4+n*.5,end=4.0+n*.5)
+            for side in (-1,1):part(parent,'Satellite',(side*57,y+3,0),(3,5,3),t['accent'],material='glass',transparency=.3,yaw=35)
+        for x,z in ((-57,-31),(57,31)):part(parent,'OuterPier',(x,129,z),(1.8,232,1.8),(117,140,184))
+    elif theme=='Canopy':
+        for x,z in ((53,48),(-55,-46),(52,-50)):
+            part(parent,'LivingTrunk',(x,120,z),(4.5,228,4.5),(111,89,62))
+            for y in (37,89,141,193,239):
+                beam(parent,'Branch',(x,y,z),(x*.78,y+7,z*.78),1.8,(129,110,73),'smooth')
+                part(parent,'LeafCanopy',(x,y+9,z),(18,6,20),(112,160,91),shape=0)
+                for offset in (-4,4):beam(parent,'HangingVine',(x+offset,y+6,z),(x+offset,y-8,z),.22,(134,172,83),'smooth')
+        for p in route:
+            if p['kind'] in ('sector_rest','updraft_launch'):
+                for side in (-1,1):part(parent,'WoodSupport',(p['x']+side*3,p['top']-2.3,p['z']),(1.1,3,1.1),(134,106,73))
+    else:
+        for x,z in ((57,40),(-57,-40),(-57,40)):
+            part(parent,'CoolingSpine',(x,122,z),(3.5,232,3.5),(83,113,131),material='metal')
+            for y in (22,74,126,178,238):
+                part(parent,'SpineClamp',(x,y,z),(6.5,1.2,6.5),t['base'],material='metal')
+                part(parent,'StatusLamp',(x,y+2,z),(3.6,.35,3.6),t['accent'],material='neon')
+        for y in (22,126,238):circle_ring(parent,'ReactorFrame',(0,y,0),61,.5,t['base'],segments=12,material='metal')
+    for p in route:
+        if p['kind']=='wall_ledge':
+            a=math.radians(p.get('yaw',0));off=p['width']/2+1.7
+            part(parent,'LedgeWall',(p['x']+math.cos(a)*off,p['top']+2.7,p['z']-math.sin(a)*off),
+                 (.8,7,p['depth']+2),t['base'],yaw=p.get('yaw',0))
 
 
 def build_course(theme):
-    t = THEMES[theme]
-    root = item('Model', theme)
-    route = course_route(theme)
-    platforms = item('Folder', 'Course', root)
-    props = item('Folder', 'Architecture', root)
-    gates = item('Folder', 'Gates', root)
-    hazards = item('Folder', 'Hazards', root)
-    for p in route:
-        deck(platforms, p['name'], p['x'], p['z'], p['width'], p['depth'], p['top'], theme)
-        if p.get('gate'):
-            n = p['gate']
-            part(gates, f'Gate{n:02d}', (p['x'], p['top']+6, p['z']),
-                 (p['width']+3, 16, p['depth']+1), t['accent'], transparency=1, touch=True)
-            # Every sixth section gets a large clear milestone; no forest of text.
-            if n % 6 == 0 and n < 24:
-                arch(props, f'Sector{n//6+1}', 0, p['z'], p['top'], 38, t['accent'], f'SECTOR {n//6+1:02d}')
-            else:
-                part(props, 'Milestone', (p['x']+p['width']/2+1.5, p['top']+1.5, p['z']), (.3, 3, .6), t['accent'], material='neon')
-    shortcuts = []
-    for section in (4, 10, 16, 22):
-        prior, ending = route[section*3], route[(section+1)*3]
-        edge_start = prior['z']-prior['depth']/2
-        edge_end = ending['z']+ending['depth']/2
-        clear_span = edge_start-edge_end
-        # One deliberate long leap, then one ordinary jump. Never two compulsory
-        # dashes inside a cooldown. Its width, not an invisible wall, is the risk.
-        depth = clear_span-14.5-3.5
-        z = edge_end+3.5+depth/2
-        alt = dict(index=100+section, x=0, z=z, width=6.5, depth=depth, top=22.5,
-                   name=f'RiskShortcut{section+1:02d}', from_index=prior['index'], to_index=ending['index'],
-                   entry_gap=14.5, exit_gap=3.5, required_dash=True)
-        deck(platforms, alt['name'], 0, z, 6.5, depth, 22.5, theme, shortcut=True)
-        shortcuts.append(alt)
-    end = route[-1]
-    part(root, 'Start', (0, 26, 5), (5, 1, 5), t['accent'], transparency=1)
-    part(root, 'Finish', (0, 28, end['z']-5), (29, 11, 7), t['accent'], transparency=1, touch=True)
-    length = abs(end['z'])+83
-    center_z = (40+end['z']-43)/2
-    part(root, 'Bounds', (0, 49, center_z), (116, 92, length), t['accent'], transparency=1)
-    part(hazards, 'KillFloor', (0, 3, center_z), (116, 2, length), t['floor'],
-         transparency=1 if theme in ('Skyline', 'Zenith') else 0, touch=True, reflectance=.09 if theme == 'Neon' else 0)
-    arch(props, 'StartArch', 0, 8, 22, 31, t['accent'], t['title'])
-    arch(props, 'FinishArch', 0, end['z']-5, 23, 30, COLORS['gold'], 'FINISH')
-    sign(props, 'StartRule', 'ONE RUN. MAKE IT COUNT.', (0, 25, -6), (20, 1.5, .2), fg=COLORS['white'])
-    {'Skyline': skyline_architecture, 'Neon': neon_architecture, 'Grid': grid_architecture,
-     'Foundry': foundry_architecture, 'Zenith': zenith_architecture}[theme](props, route)
-    COURSE_METADATA[theme] = dict(primary=route, shortcuts=shortcuts,
-        gates=[p['index'] for p in route if p.get('gate')], finish=(0, 28, end['z']-5), start=(0, 26, 5),
-        bounds=dict(center=(0,49,center_z), size=(116,92,length)),
-        course_length_studs=round(abs(end['z']), 2), normal_max_gap=max(p.get('gap',0) for p in route),
-        description='74 primary landings; 24 gates; no primary jump requires dash. Gold forks need one dash. Decoration is non-collidable.')
+    root=item('Model',theme);t=THEMES[theme]
+    course=item('Folder','Course',root);catches=item('Folder','CatchLedges',root)
+    props=item('Folder','Architecture',root);gates=item('Folder','Gates',root);hazards=item('Folder','Hazards',root)
+    route,alternates,branches=course_routes(theme);recovery=recovery_ledges(route,alternates)
+    for p in route+alternates:
+        platform(course,p,theme)
+        if p['kind']=='sector_rest':
+            gate=part(gates,f'Gate{p["section"]:02d}',(p['x'],p['top']+2,p['z']),(14,6,14),t['accent'],transparency=1,touch=True)
+            value(gate,'StringValue','Landing',p['name'])
+        if p.get('motion')=='Shuttle':
+            tx,ty,tz=p['travel'];a=(p['x'],p['top']-2.5,p['z']);b=(a[0]+tx,a[1]+ty,a[2]+tz)
+            beam(props,'ShuttleRail',a,b,.2,t['base'],'metal')
+            for point in (a,b):part(props,'DockStop',point,(1.4,.8,1.4),t['accent'])
+        if p['kind']=='updraft_launch':
+            receiver=route[p['index']+1]
+            dx,dz=receiver['x']-p['x'],receiver['z']-p['z'];length=math.hypot(dx,dz)
+            x,z=p['x']-dz/length*7,p['z']+dx/length*7
+            for n in range(3):
+                yy=p['top']+3+n*3
+                for wing in (-1,1):beam(props,'LiftGuide',(x+wing*.65,yy-.6,z),(x,yy,z),.15,t['accent'],'neon')
+    for p in recovery:platform(catches,p,theme,catch=True)
+    obstacles=add_obstacles(props,hazards,route,alternates,theme)
+    first=route[1];yaw=math.degrees(math.atan2(-first['x'],-first['z']))
+    crown=route[-1];finish=(crown['x'],crown['top']+5,crown['z'])
+    part(root,'Start',(0,26,0),(4,1,4),t['accent'],transparency=1,yaw=yaw)
+    for i,(x,z) in enumerate(( (x,z) for z in (-4,4) for x in (-8,-4,0,4,8)),1):
+        part(root,f'Start{i:02d}',(x,26,z),(1,1,1),t['accent'],transparency=1,yaw=yaw)
+        part(props,'StartMark',(x,22.025,z),(.8,.05,.8),t['base'],yaw=45)
+    part(root,'Finish',finish,(24,12,20),t['accent'],transparency=1,touch=True)
+    part(root,'Bounds',(0,131,0),(152,286,152),t['accent'],transparency=1)
+    part(hazards,'KillFloor',(0,-12,0),(152,2,152),(167,193,207),transparency=1,touch=True)
+    architecture(props,route,theme)
+    # An unmistakable finish plaza. Trigger covers the whole crown so touching
+    # a hidden point is never required; the visible arch is only presentation.
+    for x in (-12.6,12.6):part(props,'FinishPost',(crown['x']+x,237,crown['z']+8),(.8,10,.8),t['base'])
+    part(props,'FinishLintel',(crown['x'],242,crown['z']+8),(26,.8,1),t['accent'])
+    sign(props,'FinishWord','FINISH',(crown['x'],242,crown['z']+8.6),(16,2.4,.15),bg=t['base'],fg=t['surface'],title=True)
+    for xx in range(-5,6):
+        part(props,'FinishCheck',(crown['x']+xx*2,232.045,crown['z']),(1.95,.09,2),t['base'] if xx%2 else t['surface'])
+    by_name={p['name']:p for p in route+alternates}
+    edges=[transition_metrics(a,b) for a,b in zip(route,route[1:])]
+    all_surfaces=route+alternates+recovery
+    for edge,a,b in zip(edges,route,route[1:]):edge.update(approach_points(a,b,obstacles=all_surfaces))
+    for section in branches:
+        for alternative in section['alternatives']:
+            chain=[by_name[name] for name in alternative['chain']]
+            alternative['transitions']=[dict(transition_metrics(a,b),**approach_points(a,b,obstacles=all_surfaces)) for a,b in zip(chain,chain[1:])]
+    COURSE_METADATA[theme]=dict(primary=route,route=route,alternates=alternates,branches=branches,catch_ledges=recovery,obstacles=obstacles,
+        gates=[dict(name=f'Gate{p["section"]:02d}',height=p['top']+2,center=(p['x'],p['top']+2,p['z']),size=(14,6,14),landing=p['name']) for p in route if p['kind']=='sector_rest'],
+        start=(0,26,0),finish=finish,finish_surface=232,course_height_studs=210,
+        required_updrafts=[p['name'] for p in route if p['updraft']],
+        movers=[p for p in route if p.get('motion')=='Shuttle'],timed_platforms=[p for p in route if p.get('motion')=='Blink'],
+        transitions=edges,bounds=dict(center=(0,131,0),size=(152,286,152)),
+        difficulty=dict(normal_gap_min=round(min(p['gap'] for p in edges if not p['updraft']),3),normal_gap_max=round(max(p['gap'] for p in edges if not p['updraft']),3),
+                        mandatory_lift_rise=14,alternate_routes=sum(len(b['alternatives']) for b in branches),physics=dict(gravity=GRAVITY,walk_speed=WALK_SPEED,jump_speed=JUMP_SPEED,updraft_speed=UPDRAFT_SPEED)),
+        description='Eight demanding tower sectors with independent precision bypasses, route choice, 14-stud Updraft climbs, moving shuttles, timed steps and recoverable falls.')
     return root
 
 
-def skyline_architecture(parent, route):
-    count = math.ceil(abs(route[-1]['z'])/76)+1
-    for side in (-1, 1):
-        for segment in range(count):
-            z = 5-segment*76
-            x = side*40
-            group = item('Model', f'TransitPylon{side}_{segment}', parent)
-            part(group, 'LimestoneSpine', (x, 36, z), (7, 50, 39), (199, 215, 225), material='concrete')
-            part(group, 'Recess', (x-side*3.55, 36, z), (.12, 30, 30), (63, 88, 109))
-            part(group, 'Glass', (x-side*3.64, 37, z), (.1, 24, 25), (148, 206, 226), material='glass', transparency=.32)
-            for rib in (-9, 0, 9):
-                part(group, 'Rib', (x-side*3.78, 37, z+rib), (.22, 27, .3), (181, 208, 217), material='metal')
-            part(group, 'Crown', (x, 62, z), (10, 1.8, 42), (231, 239, 242))
-            part(group, 'Line', (x-side*3.8, 23, z), (.14, .25, 33), THEMES['Skyline']['accent'], material='neon')
-            if segment % 2 == 0:
-                beam(group, 'Brace', (x-side*4, 19, z-14), (x-side*13, 8, z), .65, (110, 142, 163))
-                part(group, 'DistantSpire', (side*91, 21, z-28), (19, 75+(segment%3)*14, 31), (132, 168, 191))
-                for i in range(3):
-                    part(group, 'Cloud', (side*(47+i*12), -3+i, z-12+i*14), (52, 15, 51), (235, 244, 248), shape=0, transparency=.12)
-    for n in (6, 12, 18):
-        z = route[n*3]['z']
-        part(parent, 'TransitBridge', (0, 71, z), (92, 3, 9), (161, 187, 204), material='metal')
-        part(parent, 'BridgeStrip', (0, 69.4, z+2), (62, .14, .7), THEMES['Skyline']['accent'], material='neon')
-    sign(parent, 'Terminal', 'CLOUDLINE / ARRIVALS', (0, 57, route[-1]['z']-43), (46, 7, 1), bg=(206,222,232), fg=(45,77,100))
-
-
-def neon_architecture(parent, route):
-    count = math.ceil(abs(route[-1]['z'])/68)+1
-    palette = ((28, 32, 48), (37, 32, 55), (26, 38, 53))
-    for side in (-1, 1):
-        for b in range(count):
-            z, x = 8-b*68, side*39
-            h = 72+(b%3)*14
-            group = item('Model', f'AlleyBlock{side}_{b}', parent)
-            part(group, 'Building', (x, h/2+3, z), (17, h, 64), palette[b%3], material='concrete')
-            part(group, 'Roof', (x, h+3, z), (19, 1.8, 66), (57, 62, 81), material='metal')
-            for row in range(3):
-                for col in range(3):
-                    tint = (221, 175, 129) if (row+col+b)%5 == 0 else (88, 108, 160)
-                    part(group, 'Window', (x-side*8.55, 32+row*18, z-20+col*20), (.14, 7, 8), tint, material='neon', transparency=.42)
-            part(group, 'ServicePipe', (x-side*9, 19, z), (.55, .55, 61), (87, 80, 110), material='metal')
-            part(group, 'Downpipe', (x-side*9, 36, z+26), (.65, 62, .65), (83, 88, 107), material='metal')
-            part(group, 'Vent', (x-side*9.6, 29, z-16), (2.3, 4.6, 6), (85, 95, 118), material='metal')
-            if b % 3 == 1:
-                accent = COLORS['pink'] if side == 1 else COLORS['cyan']
-                sign(group, 'BladeSign', ('NIGHT\nSHIFT', 'VOID', '02 /\nA.M.', 'RUN')[(b//3)%4],
-                     (side*28.7, 41, z+1), (6, 14, .6), fg=accent)
-                lamp = part(group, 'CanopyLight', (side*28, 27, z-15), (4, .2, 11), accent, material='neon')
-                light(lamp, 'NeonFill', accent, .6, 19)
-    for b in range(0, count, 3):
-        z = -35-b*68
-        beam(parent, 'Cable', (-30, 61, z), (30, 58, z-4), .15, (9, 13, 23))
-        for x in (-20, -10, 0, 10, 20):
-            part(parent, 'Lantern', (x, 58.5, z-2), (.9, 1.8, .9), (255, 199, 148), material='neon')
-    part(parent, 'TerminalTower', (0, 73, route[-1]['z']-48), (80, 140, 16), (23, 29, 48))
-    sign(parent, 'Terminal', 'AFTERHOURS', (0, 51, route[-1]['z']-39), (39, 8, .6), fg=THEMES['Neon']['accent'])
-
-
-def grid_architecture(parent, route):
-    length = abs(route[-1]['z'])+78
-    center_z = (35+route[-1]['z']-43)/2
-    for side in (-1, 1):
-        part(parent, 'GalleryWall', (side*36, 40, center_z), (3, 74, length), (201, 218, 228))
-        part(parent, 'Plinth', (side*34.4, 14, center_z), (.12, 20, length-2), (60, 84, 107))
-        part(parent, 'TrackLine', (side*34.25, 24, center_z), (.14, .22, length-2), THEMES['Grid']['accent'], material='neon')
-        for n in range(math.ceil(length/44)):
-            z = 20-n*44
-            part(parent, 'Joint', (side*34.3, 47, z), (.12, 57, .18), (161, 187, 205))
-            for row in range(2):
-                yy = 36+row*22
-                part(parent, 'WallTile', (side*34.15, yy, z-20), (.18, 15, 22), (183, 205, 219))
-                part(parent, 'Inset', (side*34, yy, z-20), (.13, 12.5, 19.5), (218, 232, 239))
-            if n % 3 == 1:
-                part(parent, 'GalleryLight', (side*33.7, 70, z-20), (.2, .4, 20), COLORS['white'], material='neon')
-        for n in range(3,24,6):
-            p = route[n*3]
-            part(parent, 'ExhibitCube', (side*28, 34, p['z']), (5, 5, 5), THEMES['Grid']['accent'] if n % 2 else COLORS['gold'], yaw=45)
-    for z in (36, route[-1]['z']-43):
-        part(parent, 'EndWall', (0, 40, z), (75, 74, 3), (196, 213, 225))
-    for n in range(math.ceil(length/44)):
-        z = 20-n*44
-        part(parent, 'FloorLine', (0, 4.035, z), (68, .07, .15), (72, 91, 115))
-    sign(parent, 'Terminal', 'THE GRID', (0, 52, route[-1]['z']-41.4), (36, 8, .15), bg=(44,66,87), fg=THEMES['Grid']['accent'])
-
-
-def foundry_architecture(parent, route):
-    length = abs(route[-1]['z'])
-    for side in (-1, 1):
-        for n in range(math.ceil(length/82)+1):
-            z = 4-n*82
-            group = item('Model', f'FoundryBay{side}_{n}', parent)
-            part(group, 'SteelWall', (side*40, 40, z), (5, 75, 76), (49, 48, 51), material='metal')
-            part(group, 'IBeam', (side*36, 38, z-36), (2, 70, 3), (92, 77, 60), material='metal')
-            part(group, 'BaseGirder', (side*35.7, 13, z), (2, 8, 76), (83, 73, 65), material='metal')
-            part(group, 'HighPipe', (side*35, 61, z), (2.5, 2.5, 76), (124, 100, 68), material='metal')
-            part(group, 'GlowingVent', (side*37.4, 39, z), (.3, 20, 20), (222, 137, 62), material='neon', transparency=.22)
-            for rib in (-7, 0, 7):
-                part(group, 'VentRib', (side*37.1, 39, z+rib), (.35, 23, 2.4), (41, 40, 47), material='metal')
-            part(group, 'Tank', (side*32, 20, z-22), (6, 14, 6), (85, 90, 96), shape=2, roll=90, material='metal')
-            part(group, 'TankBand', (side*32, 20, z-22), (.7, 14.3, 6.3), (174, 142, 95), shape=2, roll=90, material='metal')
-            if n % 2 == 0:
-                beam(group, 'Diagonal', (side*35, 18, z+21), (side*35, 60, z-21), .8, (103, 88, 72))
-    for n in (3, 9, 15, 21):
-        z = route[n*3]['z']
-        part(parent, 'Gantry', (0, 67, z), (82, 5, 9), (101, 84, 64), material='metal')
-        for x in (-23, 23):
-            part(parent, 'Pendant', (x, 55, z), (.35, 20, .35), (57, 59, 66), material='metal')
-            lamp = part(parent, 'WorkLight', (x, 45, z), (8, .5, 3), (255, 204, 137), material='neon')
-            light(lamp, 'WarmPool', (255, 188, 100), .7, 27)
-    sign(parent, 'Terminal', 'FOUNDRY / EXIT 04', (0, 49, route[-1]['z']-42), (40, 7, 1), fg=THEMES['Foundry']['accent'])
-
-
-def zenith_architecture(parent, route):
-    # Open observatory with restrained star posts and orbit ribs, no asset meshes.
-    for side in (-1, 1):
-        for n in range(math.ceil(abs(route[-1]['z'])/82)+1):
-            z = 5-n*82
-            x = side*40
-            part(parent, 'ObservatoryPier', (x, 35, z), (5, 51, 11), (69, 88, 124), material='metal')
-            part(parent, 'SilverCap', (x, 61, z), (8, 1.7, 14), (165, 184, 211), material='metal')
-            part(parent, 'StarLine', (x-side*2.6, 37, z+5), (.12, 34, .28), THEMES['Zenith']['accent'], material='neon')
-            part(parent, 'GlassFin', (x-side*3.1, 33, z-17), (.18, 31, 21), (107, 144, 190), material='glass', transparency=.52)
-            if n % 2 == 0:
-                part(parent, 'DistantIsland', (side*(84+n%3*17), -4, z-21), (30, 27, 50), (61, 82, 120), shape=0)
-                part(parent, 'CloudVeil', (side*63, -9, z+12), (78, 13, 69), (109, 135, 177), shape=0, transparency=.55)
-        for n in range(13):
-            part(parent, 'Star', (side*(60+n%4*19), 70+n%5*11, -60-n*94), (.55, .55, .55), (217, 228, 255), material='neon', shape=0)
-    for section in (2, 8, 14, 20):
-        z = route[section*3]['z']
-        points = [(math.cos(math.radians(a))*44, 30+math.sin(math.radians(a))*44, z) for a in range(0,181,15)]
-        for a,b in zip(points, points[1:]):
-            beam(parent, 'OrbitRib', a, b, .65, (115, 144, 186))
-        part(parent, 'OrbitCrown', (0, 76, z), (3, 3, 3), THEMES['Zenith']['accent'], material='neon', shape=0)
-    sign(parent, 'Terminal', 'ZENITH / OBSERVATORY', (0, 49, route[-1]['z']-41), (42, 7, 1), fg=THEMES['Zenith']['accent'])
-
-
-def ring(parent, name, center, radius, width, rgb, *, segments=32, material='neon'):
-    x,y,z = center
-    for n in range(segments):
-        a, b = math.tau*n/segments, math.tau*(n+1)/segments
-        beam(parent, name, (x+math.cos(a)*radius,y,z+math.sin(a)*radius),
-             (x+math.cos(b)*radius,y,z+math.sin(b)*radius), width, rgb, material)
-
-
 def build_lobby():
-    """A dark race-club atrium. Interaction labels sit on physical kiosks, not HUD."""
-    lobby = item('Model', 'Lobby')
-    base = item('Folder', 'Structure', lobby)
-    detail = item('Folder', 'Details', lobby)
-    cyan, ivory = (107, 226, 230), (232, 235, 231)
-    charcoal, navy = (22, 28, 38), (32, 42, 58)
-    part(base, 'MainDeck', (0, 20, 91), (148, 4, 110), charcoal, collide=True, material='concrete')
-    part(detail, 'Foundation', (0, 16.8, 91), (142, 2.4, 104), (12, 18, 27), material='metal')
-    part(detail, 'CentralInlay', (0, 22.035, 88), (64, .07, 91), navy)
-    for x in (-33,33):
-        part(detail, 'LaneInlay', (x,22.08,88), (.12,.08,92), (63,87,109), material='metal')
-    # Tiny joints, rather than a checkerboard, give the large floor believable scale.
-    for z in (55,77,99,121,143):
-        part(detail, 'FloorJoint', (0,22.075,z), (140,.04,.075), (40,50,64))
-    for side in (-1,1):
-        part(base, 'SideWall', (side*74,37,91), (2,34,110), (19,25,35), collide=True)
-        part(detail, 'WallLower', (side*72.9,26,91), (.15,8,106), (39,50,66))
-        part(detail, 'SideGlass', (side*72.8,40,85), (.1,17,74), (73,116,144), material='glass', transparency=.58)
-        part(base, 'GalleryRoof', (side*51,55,91), (47,2.5,114), (16,22,31), collide=True)
-        part(detail, 'CoveLight', (side*28.6,53.7,91), (.2,.18,106), ivory, material='neon')
-        for z in (42,75,108,141):
-            part(base,'AtriumColumn',(side*30,37,z),(2.3,30,2.3),(43,53,68),collide=True,material='metal')
-            part(detail,'ColumnEdge',(side*29.15,37,z+.85),(.13,25,.13),cyan,material='neon')
-        for z in (56,122):
-            lamp = part(detail,'RecessedLight',(side*49,53.5,z),(15,.14,2),ivory,material='neon')
-            light(lamp,'GalleryFill',(175,205,230),.9,36)
-    # Back gallery is quiet architecture. Forward edge is a glass race vista.
-    part(base,'BackWall',(0,38,147),(148,36,2),(19,26,37),collide=True)
-    part(base,'VistaGlass',(0,30,35),(148,16,1),(92,152,177),collide=True,material='glass',transparency=.82)
-    part(detail,'VistaRail',(0,38.2,35),(148,.24,1.2),(111,140,157),material='metal')
-    part(detail,'VistaLine',(0,22.12,38),(140,.12,.18),cyan,material='neon')
-    sign(detail,'ClubWordmark','D A S H E R',(0,44,145.8),(41,7,.2),face=5,bg=(19,26,37),fg=ivory)
-    sign(detail,'ClubCaption','R A C E   C L U B',(0,36.9,145.75),(25,2.1,.2),face=5,bg=(19,26,37),fg=(138,158,180))
-    sign(detail,'VistaHeader','FIND YOUR LINE',(0,45,36),(32,3.5,.5),fg=ivory)
-    sign(detail,'WelcomeWordmark','D A S H E R',(0,35,40),(24,4,.3),bg=navy,fg=ivory)
-    sign(detail,'WelcomeCaption','VOTE.  RACE.  REPEAT.',(0,30.5,40),(23,1.8,.3),bg=navy,fg=cyan)
-    for x in (-21,21):
-        part(detail,'PortalUpright',(x,32,41),(1,20,1),navy,material='metal')
-        part(detail,'PortalLine',(x-.25 if x>0 else x+.25,32,41.55),(.11,17,.08),cyan,material='neon')
-    # Spawn emblem and an overhead light sculpture make the centre memorable.
-    ring(detail,'SpawnHalo',(0,22.14,87),11,.10,cyan)
-    ring(detail,'InnerHalo',(0,22.12,87),9.9,.06,(73,114,137))
-    ring(detail,'CanopyHalo',(0,52,87),14,.24,ivory,segments=40)
-    fill=part(detail,'AtriumFillSource',(0,44,87),(1,1,1),ivory,transparency=1)
-    light(fill,'AtriumFill',(186,211,235),1.4,65)
-    for x in (-10,10):
-        beam(detail,'SuspensionWire',(x,52,77),(x,61,77),.08,(81,99,122))
-        beam(detail,'SuspensionWire',(x,52,97),(x,61,97),.08,(81,99,122))
-    for dx in (-1,1):
-        beam(detail,'SpawnChevron',(dx*3.5,22.2,88),(0,22.2,83),.25,ivory,'neon')
-    # MainDeck supplies collision; an invisible spawn plate must not make avatars float.
-    spawn=part(lobby,'SpawnLocation',(0,22.5,87),(7,1,7),cyan,collide=False,cls='SpawnLocation',transparency=1)
-    scalar(spawn,'bool','Neutral',True)
-    scalar(spawn,'float','Duration',0)
-    scalar(spawn,'bool','AllowTeamChangeOnTouch',False)
-    kiosks=item('Folder','Kiosks',lobby)
-    definitions=[('Shop','SHOP',-53,70,90,cyan),('Inventory','COLLECTION',-53,108,90,ivory),
-                 ('Quests','WEEKLY',53,70,-90,(247,204,143)),('Leaderboard','RANKINGS',53,108,-90,(185,181,244))]
-    for name,label,x,z,yaw,accent in definitions:
-        side=1 if x>0 else -1
-        stand=item('Model',name+'Housing',detail)
-        part(stand,'Plinth',(x,23,z),(16,2,19),(36,47,62),collide=True)
-        part(stand,'BackPanel',(x+side*4,31,z),(2,16,18),(29,39,54),collide=True)
-        sign(kiosks,name,label,(x-side*3,30,z),(13,4,.35),yaw=yaw,bg=(23,32,45),fg=accent)
-        part(stand,'LightColumn',(x-side*3.2,28,z+8),(.2,10,.22),accent,material='neon')
-        part(stand,'FloorLight',(x-side*6.9,24.06,z),(.2,.12,16),accent,material='neon')
-        # A simple material object makes each kiosk readable from across the room.
-        emblem=part(stand,'DisplayObject',(x-side*1.5,26.8,z),(2.5,2.5,2.5),accent,material='neon',yaw=45,shape=0 if name=='Shop' else 1)
-        light(emblem,'KioskGlow',accent,.35,14)
-    lounge=item('Folder','Lounge',lobby)
-    for x in (-13,13):
-        part(lounge,'Bench',(x,24,128),(18,1.1,5),(53,64,80),collide=True)
-        part(lounge,'Backrest',(x,25.5,130.2),(18,3,1),(46,57,74),collide=True)
-        part(detail,'BenchFoot',(x,22.9,128),(14,1.9,3),(15,20,29),material='metal')
-        part(detail,'BenchLight',(x,23.65,125.45),(14,.1,.1),cyan,material='neon')
-    for x,z in ((-65,44),(65,44),(-65,135),(65,135)):
-        part(detail,'Planter',(x,24,z),(7,4,7),(39,53,68))
-        part(detail,'Soil',(x,26.05,z),(6,.1,6),(21,31,37))
-        for n in range(4):
-            part(detail,'Plant',(x+math.cos(n*1.57)*1.3,29+(n%2),z+math.sin(n*1.57)*1.3),(2.4,6,2.4),(67,115+n*5,105),shape=0)
-    # Landing outside the atrium keeps the club grounded without a giant baseplate.
-    for side in (-1,1):
-        for z in (44,138):
-            part(detail,'Substructure',(side*61,2,z),(7,28,7),(29,43,61),material='metal')
-        part(detail,'FarTower',(side*125,24,75),(25,90,46),(45,67,94))
-    for name,pos in [('CameraStart',(22,46,133)),('CameraEnd',(-16,34,113)),('CameraLookAt',(0,28,78))]:
-        part(lobby,name,pos,(1,1,1),cyan,transparency=1)
-    return lobby
+    from lobby05 import build_lobby as make_lobby
+    return make_lobby()
 
 
 def build_world():
     global _ids
-    _ids=itertools.count(1)
-    COURSE_METADATA.clear()
-    lobby=build_lobby()
-    maps=item('Folder','Maps')
-    for name in THEMES:
-        maps.append(build_course(name))
+    _ids=itertools.count(1);COURSE_METADATA.clear();lobby=build_lobby();maps=item('Folder','Maps')
+    for theme in THEMES:maps.append(build_course(theme))
     return lobby,maps
 
 
-if __name__ == '__main__':
-    import json
-    lobby,maps=build_world()
-    counts={m.find("Properties/string[@name='Name']").text:sum(1 for p in m.iter('Item') if p.get('class')=='Part') for m in maps.findall('Item')}
-    print(json.dumps({'parts':counts,'lobby_parts':sum(1 for p in lobby.iter('Item') if p.get('class') in ('Part','SpawnLocation')),
-                      'courses':{k:{'length':v['course_length_studs'],'finish':v['finish'],'primary_platforms':len(v['primary']),'shortcuts':len(v['shortcuts'])} for k,v in COURSE_METADATA.items()}},indent=2))
+def verify_geometry():
+    lobby,maps=build_world();counts={}
+    for theme,data in COURSE_METADATA.items():
+        route,alts=data['route'],data['alternates'];by_name={p['name']:p for p in route+alts}
+        assert len(route)==66 and len(data['required_updrafts'])==8
+        assert len(data['branches'])==8 and len(alts)==34
+        assert [g['landing'] for g in data['gates']]==[f'P{n:03d}' for n in range(8,65,8)]
+        assert transitions_valid(route),(theme,'primary reachability')
+        assert clear_headroom(route+alts+data['catch_ledges']),(theme,'headroom')
+        assert data['difficulty']['normal_gap_min']>=3.5,(theme,'trivial near-touching main gap')
+        assert len(data['movers'])==2 and len(data['timed_platforms'])==4
+        for branch in data['branches']:
+            assert branch['alternatives'],(theme,branch['section'],'no genuine choice')
+            for alternative in branch['alternatives']:
+                chain=[by_name[name] for name in alternative['chain']]
+                assert transitions_valid(chain),(theme,alternative)
+                assert any(name not in branch['main'] for name in alternative['chain'])
+                assert all(p['landing_margin']>=1.1 for p in alternative['transitions'])
+                assert all(p['distance']<p['range'] for p in alternative['transitions']), (theme,'alternate edge approach range')
+                assert all(p['corridor_checked'] for p in alternative['transitions']), (theme,'alternate jump corridor')
+        assert all(p['distance']<p['range'] for p in data['transitions']), (theme,'main edge approach range')
+        assert all(p['corridor_checked'] for p in data['transitions']), (theme,'main jump corridor')
+        assert all(p['rise']==14 for p in data['transitions'] if p['updraft'])
+        for obstacle in data['obstacles']:
+            if obstacle['kind']=='spinner':assert obstacle['main_clearance']>10,(theme,'spinner clips main route')
+        for p in data['movers']:
+            previous,target=route[p['index']-1],route[p['index']+1]
+            assert rectangle_gap(previous,p)<=8.6 and rectangle_gap(motion_positions(p)[-1],target)<=8.6
+            assert rectangle_gap(p,target)>18,'A real ride must be needed before the main-route exit'
+            assert math.sqrt(sum(x*x for x in p['travel']))==18
+        for p in data['catch_ledges']:
+            receiver=next(q for q in route if q['name']==p['rejoin'])
+            assert 4<=rectangle_gap(p,receiver)<=5 and p['top']==receiver['top']-2
+        for p in route+alts+data['catch_ledges']:
+            for x,z in corners(p):assert abs(x)<75 and abs(z)<75,(theme,p['name'],x,z)
+            assert 0<=p['completed_stage']<=8
+        model=next(m for m in maps.findall('Item') if m.find("Properties/string[@name='Name']").text==theme)
+        counts[theme]=sum(1 for n in model.iter('Item') if n.attrib['class']=='Part')
+        assert counts[theme]<1000
+        assert not any(n.attrib['class'] in ('Script','LocalScript','ModuleScript') for n in model.iter('Item'))
+    refs=[n.attrib['referent'] for root in (lobby,maps) for n in root.iter('Item')]
+    assert len(refs)==len(set(refs))
+    return counts,sum(1 for n in lobby.iter('Item') if n.attrib['class'] in ('Part','SpawnLocation'))
+
+
+if __name__=='__main__':
+    import json,sys
+    # lobby05 lazily imports these helpers. A direct script run must still share
+    # the same referent counter as that import, rather than loading world twice.
+    sys.modules['world']=sys.modules[__name__]
+    counts,lobby_count=verify_geometry()
+    print(json.dumps(dict(parts=counts,lobby_parts=lobby_count,courses={name:dict(route_count=len(m['route']),alternate_platforms=len(m['alternates']),height=m['course_height_studs'],difficulty=m['difficulty']) for name,m in COURSE_METADATA.items()}),indent=2))
