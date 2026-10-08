@@ -17,12 +17,3 @@ Reviewed 23 September 2026. The videos were opened in a browser and sampled visu
 ## Design decisions
 
 Difficulty comes from precision, boarding windows, disappearing footholds and environmental timing. Updraft provides an intentional route tool and an occasional recovery opportunity. Players cannot hit, push or body-block each other. Recovery ledges are terrain, not saved checkpoints. Stage currency and XP can be claimed once per sector per round, including after a restart. These are design choices to playtest, not evidence of retention or commercial success.
-
-
-## 0.7 movement and input investigation
-
-- Roblox server-side detection: https://create.roblox.com/docs/scripting/security/server-side-detection
-- Client/server boundary and latency: https://create.roblox.com/docs/scripting/security/client-server-boundary
-- Studio Network Simulator: https://create.roblox.com/docs/studio/network-simulator
-
-User-provided Tower of Hell screenshots informed open cylindrical silhouettes, color-separated sections and thin beam routes. No third-party map, code or asset was copied.

@@ -1,54 +1,50 @@
-# Dasher — Ascent 0.5
+# Dasher — Ascent 0.7
 
-**Concept, game design and creative direction: Kuzey (Lloydhf).** Implementation, build tooling and documentation include OpenAI Codex assistance. [Read the design case study](docs/PORTFOLIO.md).
+A competitive Roblox tower obby built around route choice, recoverable falls and one limited **Updraft**. Climb Helix, Canopy and Reactor, vote for the next tower and spend earned coins on cosmetic effects.
 
-A competitive Roblox tower obby for up to **10 racers**. Choose your route through three towers: Helix, Canopy and Reactor. Updraft is the only active ability; avatars cannot push or attack each other.
+**Concept, game design and creative direction: Kuzey (Lloydhf).** Implementation, testing, build tooling and documentation include OpenAI Codex assistance. [Design case study](docs/PORTFOLIO.md) · [Turkish play guide](BASLA.md) · [Verification](docs/TESTING.md)
 
-Download and extract **[Dasher-Studio.zip](Dasher-Studio.zip)**, then open **Dasher.rbxlx** in Roblox Studio and press **F5**. The source and editable place are also included in this repository. If Windows does not open the file directly, open Studio first and use **Ctrl + O** to select it. See **BASLA.md** for the Turkish play guide.
+![DASHER promotional artwork showing an Updraft leap](assets/branding/dasher-thumbnail-v1.png)
 
-## This version
+*AI-generated promotional illustration, created on 7 October 2026; not a gameplay screenshot. [Artwork files and provenance](assets/branding/README.md).*
 
-- Wider jumps, narrow beams, moving shuttles, disappearing steps and alternate routes that rejoin the climb.
-- Required Updraft climbs, with physical lower ledges that can catch a fall. These are not teleport checkpoints.
-- A broad, visible summit platform. Reaching the finish does not require touching one prescribed sequence of stage pads.
-- A garden atrium with a tiered fountain, hanging greenery and four NPC services: Shop, Inventory, Quests and Leaderboard.
-- Restored Nunito / Fredoka One typography, animated cosmetic shop tiles, live race standings and immediate personal finish results.
+## Open the game
 
-## Race loop
+Download and extract **[Dasher-Studio.zip](Dasher-Studio.zip)**, open **Dasher.rbxlx** in Roblox Studio and press **F5**. If double-clicking the file does not work, use **File → Open from File** in Studio. No external Studio plugin, API key or paid asset is required.
 
-Vote for a tower during the 18-second intermission, then prepare during the 8-second countdown. A race lasts up to **7 minutes**. The first finisher starts a final sprint with at most **90 seconds** remaining. The round also ends when no unfinished active racers remain. A 10-second results phase leads to the next vote.
+The source and editable geometry are included. Rebuild with `python tools/build.py`. The current **0.7 local release was completed on 8 October 2026**; this GitHub update does not publish a Roblox experience. The live deployment has not been verified to match this version.
 
-**Q** activates Updraft. Its cooldown is **3.25 seconds**, and another lift requires a brief landing. The ability meter distinguishes a cooldown from a charged ability that still needs a landing. Falling onto a lower platform keeps the run going; **R** restarts from the base without resetting the round clock.
+## What changed in 0.7
 
-The race roster allows ten entrants. Configure the published experience's server size to **10** as well. Local Studio sessions do not automatically provide ten players; use Studio's multiplayer test controls or invite real players after publishing.
+- **Open-air towers:** enclosing walls and detached decorations were removed; matte surfaces, attached edge accents and different palettes keep the route readable.
+- **Reliable movement:** automatic speed/flight corrections that pulled legitimate players backward were removed. Hazards, falls into the void and manual resets retain their normal behavior.
+- **Hold to restart:** hold **R**, controller **Y** or the reset button for **1.1 seconds**. Early release, menus/chat or lost focus cancel the hold; the HUD displays progress.
+- **Precise finishes:** stand on the marked summit pad to finish. Passing its approach or moving below it does not complete the race.
+- **Camera and countdown:** route-facing intros return control before the final 3–2–1; shared server deadlines keep the start signal aligned with movement release.
+- **Social lobby:** four vendors offer branching conversations and services; animated menus keep the racing HUD compact.
 
-## Progression
+## Play loop and progression
 
-There are eight sectors per tower. Validated course landings advance progress across alternate routes. Each newly credited sector earns **3 coins and 25 XP**, once per round. Finishing reconciles any outstanding sector rewards and adds **14 coins**, with **6 / 3 / 1** bonus coins for the first three finishers, plus finish XP. Falling or restarting cannot repeat a paid sector reward.
+Vote during an **18-second intermission**, prepare during an **8-second countdown**, then race for up to **7 minutes**. The first finish caps the remaining time at **90 seconds**. Results last **10 seconds** before the next vote. The roster supports ten entrants; the published experience's server capacity also needs to be configured to ten.
 
-Coins buy ten cosmetic movement-particle effects; they do not change abilities, speed or jump height. Approach a lobby NPC and press **E**, or use Menu to open the same pages. Shop offers animated samples and real owned/equipped states.
+**Q** activates Updraft with a **3.25-second cooldown** and a required landing before reuse. The three towers each have eight sectors, 64 main-route platforms and alternate routes. Lower ledges can catch a fall; they are physical recovery opportunities, not saved checkpoints. Avatars cannot attack or push one another.
 
-Previous balances, cosmetic ownership and XP are preserved. **Course version 5** archives old course records because the routes changed. Studio uses temporary session data. To retain an existing published game's player data, update that same experience rather than creating a different one.
+Each new sector pays **3 coins and 25 XP**, once per round. A finish adds **14 coins**, podium bonuses **6 / 3 / 1** and finish XP. Restarting cannot repeat a paid reward. Ten cosmetic particle effects change appearance without improving movement. Daily and weekly objectives remain; Robux purchases are disabled.
 
-## Source and release
+Balances, cosmetics and XP retain the existing profile format. CourseVersion **6** separates records for the changed routes. Studio uses temporary profiles; updating the same published experience is necessary to retain its player data.
 
-- `src/client`: HUD, camera, input, Updraft feedback and cosmetics.
-- `src/server`: rounds, validation, rewards, terrain motion, profiles and rankings.
-- `src/shared/Config.luau`: timings, currency, cosmetics and maps.
-- `tools/world.py`: tower geometry and route metadata.
-- `tools/lobby05.py`: garden atrium and NPCs.
-- `tools/build.py`: Python build; run `python tools/build.py`.
+## Inspect the project
 
-No external Studio plugin is required. Robux purchases are disabled in this version. Live publishing is a separate step; saving this local file does not update the published game. Use **Dasher.rbxlx**, not a file from `work/ascent05-qa`, when publishing.
+| Area | Files |
+| --- | --- |
+| Client input, HUD, conversations and camera | [Client notes](docs/CLIENT.md), `src/client/` |
+| Race lifecycle, rewards and moving surfaces | [Server notes](docs/SERVER.md), `src/server/` |
+| Balance, shared clock and reset-hold state | `src/shared/Config.luau`, `RoundClock.luau`, `ResetHold.luau` |
+| Editable maps, lobby and Python builder | [Map design](docs/MAP-DESIGN.md), `tools/` |
+| Reproducible checks | [Test instructions](tests/README.md) |
 
-See `docs/REFERENCES.md` for research and `docs/MAP-DESIGN.md` for route details. Verification must refer to this exact version: earlier v0.4 native passes are not v0.5 passes. Consult the final `docs/TESTING.md` for recorded coverage and outstanding playtests; a geometry or source check alone does not establish native playability.
+The 8 October GitHub refresh rebuilt the production place byte-for-byte, checked all **10 embedded scripts**, and passed **560 deterministic checks/replays**, **6 geometry tests** covering 339 route corridors, and the camera geometry audit. Archived native evidence was revalidated against this same source and geometry: all **192 main platforms** were traversed, with no unexpected resets or detected game-script runtime errors. The separate hold-UI session passed early-release, menu-cancel and one-reset-per-hold checks. [Dated evidence and limits](docs/TESTING.md).
 
-## Verification and portfolio context
+Real ten-client load, physical mobile/controller hardware, live persistence and human difficulty/retention testing remain outstanding. The separate [onboarding research proposal](https://github.com/Lloydhf/game-design-research) has not been run as an experiment in this build.
 
-Updated on **24 September 2026** from the hash-verified Ascent 0.5 package. The production place rebuilds byte-for-byte; all eight embedded gameplay scripts match their source. The refresh reran **201 deterministic logic checks** and **3 geometry regression tests** covering 339 route transitions. [Run the checks](tests/README.md).
-
-The earlier native Studio evidence from the same date was revalidated against the current source and geometry; Studio gameplay was not rerun during this GitHub refresh. [Verification details](docs/PUBLICATION-VERIFICATION.json) separate these checks from archived gameplay evidence. This repository update does not publish a Roblox experience.
-
-The [onboarding research proposal](https://github.com/Lloydhf/game-design-research) is a separate work in progress; its A/B experiment has not been run here. Historical Next 0.2 documentation is preserved under [docs/history-v0.2](docs/history-v0.2/INDEX.md).
-
-Geometry and UI were constructed for this project. Roblox built-in resources remain subject to Roblox terms. This repository does not currently grant an open-source license.
+Earlier [Ascent 0.5 documentation](docs/history-v0.5/INDEX.md) and [Next 0.2 documentation](docs/history-v0.2/INDEX.md) remain available. Geometry and UI were constructed for this project; Roblox built-in resources remain subject to Roblox terms. This repository does not currently grant an open-source license.

@@ -1,13 +1,71 @@
 """Regression checks for real avatar head bumps missed by point headroom tests."""
 import unittest
+import math
 import world
 
 
 class RouteClearanceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.models={}
         for theme in world.THEMES:
-            world.build_course(theme)
+            cls.models[theme]=world.build_course(theme)
+
+    def test_visible_finish_is_beyond_final_platform_and_arrival_apron(self):
+        for theme,data in world.COURSE_METADATA.items():
+            root=self.models[theme]
+            named={n.find("Properties/string[@name='Name']").text:n for n in root.findall('Item')}
+            finish,pad=named['Finish'],named['FinishPad']
+            self.assertEqual(pad.find("Properties/bool[@name='CanCollide']").text,'true')
+            self.assertEqual(pad.find("Properties/float[@name='Transparency']").text,'0')
+            def xyz(node,tag,name):
+                v=node.find(f"Properties/{tag}[@name='{name}']")
+                return tuple(float(v.find(k).text) for k in ('X','Y','Z'))
+            sensor_pos=xyz(finish,'CoordinateFrame','CFrame')
+            pad_pos=xyz(pad,'CoordinateFrame','CFrame')
+            sensor_size=xyz(finish,'Vector3','size')
+            pad_size=xyz(pad,'Vector3','size')
+            self.assertEqual(sensor_size,(11,7,4))
+            self.assertEqual(pad_size,(12,.2,5))
+            self.assertEqual(sensor_pos[::2],pad_pos[::2])
+            self.assertAlmostEqual(pad_pos[1]+pad_size[1]/2,data['finish_surface'])
+            sensor=dict(x=sensor_pos[0],z=sensor_pos[2],width=11,depth=4,yaw=data['finish_yaw'])
+            final,crown=data['route'][-2:]
+            self.assertGreater(world.rectangle_gap(final,sensor),15,(theme,'premature P064 finish'))
+            arrival=data['transitions'][-1]['landing']
+            self.assertFalse(world.inside(sensor,arrival[0],arrival[2],2.2),(theme,'premature crown arrival'))
+            self.assertFalse(world.inside(sensor,crown['x'],crown['z'],2.2),(theme,'walk to marked goal required'))
+            goal=data['finish_walk_target']
+            self.assertTrue(world.inside(sensor,goal[0],goal[2]))
+            self.assertTrue(world.inside(crown,goal[0],goal[2],-.5))
+
+    def test_open_towers_have_no_enclosing_walls_or_colliding_decoration(self):
+        for theme,data in world.COURSE_METADATA.items():
+            root=self.models[theme]
+            walls=[n for n in root.iter('Item') if n.find("Properties/string[@name='Name']").text.startswith('WallBand')]
+            self.assertEqual(len(walls),0)
+            self.assertFalse(any(n.find("Properties/string[@name='Name']").text.startswith(('TowerRib','SectorRim','SummitRim')) for n in root.iter('Item')))
+            orphan_names={'DepthPool','BaseRing','HangingPlanter','Vine','Leaf','WallStatus','LedgeWall'}
+            self.assertFalse(any(n.find("Properties/string[@name='Name']").text in orphan_names for n in root.iter('Item')))
+            surfaces=data['route']+data['alternates']+data['catch_ledges']
+            max_radius=max(math.hypot(x,z) for p in surfaces for q in world.motion_positions(p) for x,z in world.corners(q))
+            self.assertLess(max_radius,73.3,(theme,'route or recovery geometry escaped its existing envelope'))
+            # Unrelated architecture must never become an invisible jump blocker.
+            for n in root.iter('Item'):
+                props=n.find('Properties');collide=props.find("bool[@name='CanCollide']")
+                if collide is not None and collide.text=='true':
+                    name=props.find("string[@name='Name']").text
+                    self.assertTrue(name=='Walkable' or name=='FinishPad',(theme,name))
+
+    def test_normal_jumps_have_real_gaps_without_exhausting_flight_range(self):
+        for theme,data in world.COURSE_METADATA.items():
+            normal=[e for e in data['transitions'] if not e['updraft']]
+            self.assertGreaterEqual(min(e['gap'] for e in normal),4.2)
+            self.assertLessEqual(max(e['gap'] for e in normal),8.60001)
+            self.assertGreaterEqual(min(e['landing_margin'] for e in normal),1.1)
+            self.assertGreater(min(e['range']-e['distance'] for e in normal),.4)
+            beam_count=sum(p['kind']=='balance_shortcut' and p['depth']==2.8 for p in data['alternates'])
+            self.assertGreaterEqual(beam_count,4,(theme,'missing new beam routes'))
 
     def test_every_authored_branch_has_an_avatar_corridor(self):
         checked=0

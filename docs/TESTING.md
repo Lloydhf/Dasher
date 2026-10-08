@@ -1,47 +1,50 @@
-# Dasher Ascent 0.5 verification
+# Dasher Ascent 0.7 verification
 
-This document concerns CourseVersion 5 only. Prior 0.4 native playthrough and multiplayer results do not establish this version's playability.
+Final local release verified on 8 October 2026. Source and place hashes are recorded in verification-results.json. Publication is left to the user.
 
-## Server and client checks
+## Native gameplay
 
-- **95 finish/lifecycle regressions:** extracted actual server functions, actual profile and rule modules, with deterministic service mocks. Covers skipped stage rests, once-only stage/finish rewards, reconnect claims, ten entrants and distinct slots, ten finishers, departures/forfeits, race expiry and subsequent rounds. This is not a native ten-client load test.
-- **23 movement integration cases:** actual teleport initialization and movement validation/ground-support functions under controlled vector, raycast and clock inputs. Covers narrow valid landings, expired hovering rejection, teleport grace, ascent/distance budgets, and the 0.12-second grounded recharge without bypassing the 3.25-second cooldown.
-- **18 client readiness/ranking checks:** actual client helper functions. Checks cooldown display/readiness boundaries and finish ordering. Does not substitute for rendered UI checks.
-- **30 moving-support checks:** actual server-authored shuttle history and ground-support functions, including the captured native failure pose. Recent support expires after 0.2 seconds and cannot excuse airborne ascent, stale geometry or a missing platform.
-- **35 client carry checks:** actual carrier code with deterministic transforms and raycasts. Includes valid edge/corner contact, the full 18-stud shuttle trip, player movement, jump/Updraft detachment, old-character cleanup and rejection of unrelated surfaces. These mocks do not simulate Roblox replication.
+Artifact native07-1791378412 completed all three towers on the first attempt: Helix 125.16s, Canopy 112.15s, Reactor 112.57s. All 192 P001-P064 landings, three crown approaches and exact finish-pad contacts were recorded. The driver used ordinary Humanoid movement and server-approved Updraft, with no teleports or movement exemptions. Non-script geometry is identical to production; intermission18/countdown8/race420/results10 timings match production.
 
-Reports in the original QA work directory bind their tested source and harness hashes. The portable harnesses are now included under [tests/](../tests/README.md); their 201 checks were rerun during the 24 September GitHub refresh against the unchanged production sources. The three geometry regression tests also passed. [PUBLICATION-VERIFICATION.json](PUBLICATION-VERIFICATION.json) records this refresh separately from the native evidence. Refresh any affected report after source changes.
+Zero unexpected resets, zero movement corrections and zero detected game-script runtime errors occurred during the completed routes. Automatic speed/flight policing was removed at the user's request; this is not evidence of movement-exploit prevention. All 24 required climbs and one extra approved Updraft return passed. The Helix probe covered four repeated ordinary jumps and a controlled P020-to-P019 fall followed by an Updraft return. An alternate branch, results and next-round transitions were observed.
 
-## Native physics protocol
+At each summit the driver waited on CrownDeck without finishing, then walked onto FinishPad. No premature-finish exception is accepted.
 
-The local-only QA place embeds the unmodified production client/server and a separate input-driving harness. The harness drives normal Humanoid walking/jumping and requests the public Updraft action. It does not teleport the character, change physics, disable hazards or grant movement exemptions.
+Studio later reserialized the named QA file. Verification uses the byte-identical original ASCENT07_LOCAL_TEST_ONLY.rbxlx, SHA-256 cfb29d8b0238736a27a2b643b548283c8060d179d936cdfd4d1c44bab21381a6, matching the original logged artifact identity. Saved Desktop checkpoint geometry and scripts were independently compared; all generated objects and properties are preserved. Original Desktop bytes are retained during final replacement.
 
-The archived 24 September 2026 native run finished all three towers on its first attempt, with **zero resets, 24 approved Updrafts and zero game-script runtime errors** in the artifact-scoped Studio log. It traversed a representative first-sector alternate branch out-and-back, observed Results after a finish and entered the next race automatically.
+Earlier Studio settings evidence recorded 100 ms inbound/outbound delay. Those settings were still present on resumption and were restored to 0/0 before the separate UI session. The earlier settings record identifies a different artifact, so the final traversal is not presented as an independently verified network-simulation run.
 
-| Tower | Native completion time | Observed route coverage |
-| --- | ---: | --- |
-| Helix | 109.88 seconds | P001–P064 landings, followed by crown sensor contact |
-| Canopy | 107.85 seconds | P001–P063 landings; summit sensor contact during the final approach toward P064 |
-| Reactor | 109.88 seconds | P001–P064 landings, followed by crown sensor contact |
+## Camera, countdown and hold UI
 
-Canopy's broad finish sensor, including the existing 2.2-stud body-contact padding, intersects the final P063 approach toward P064. The server therefore completed the run before P064 landing. This is accepted summit-sensor contact under the existing finish contract; **a P064 landing was not observed on Canopy**. The verifier allows only this final-pad exception, checks the exact artifact geometry and final event sequence, and still requires every earlier landing and all eight Updrafts. No intermediate missing platform is excused.
+Rendered camera samples from all three maps passed near-route framing, clear lens and clear sightline checks. Independent oriented-box geometry checks include nonquery decoration and all ten spawn handoffs per map. Enclosing walls/ribs/rims were removed; route surfaces, hazards and fall catches remain.
 
-Only countdown is shortened to 5 seconds for QA. Intermission 18 seconds, results 10 seconds and the 420-second race limit match production. An optional walk to the shop NPC after completion is recorded separately from route verification.
+4 complete 3/2/1/GO sequences passed timing checks in the production-timing gameplay session. During 3/2/1 the camera was Custom, cinematic false and avatar anchored; GO followed release.
 
-**Status: native verification passed.** Artifact `native05-1790245491`, SHA256 `d6092000df259c9b299db6fb8b55f25b958e75c4beac61eaed47f2837902fe94`. Production place SHA256 `b643dd193ee79a5a63986d73621df74943d1ec15141999c009db143c963c0a2f`. `verify_native.py` checks source hashes, exact non-script geometry equivalence, the route coverage above, current-artifact runtime errors and lifecycle evidence. Prior-version and incomplete runs are rejected.
+Separate artifact hold-ui07-1791451292 passed the rendered hold UI check while Studio retained focus throughout the attempt. It embeds the same production source/geometry plus a client observer and temporary-profile Studio mode. That mode uses accelerated 2/1/12/2 phase timings: this separate session proves hold interaction during Racing, not production countdown/camera timing.
 
-Earlier attempts found an edge-rider replication issue on the smaller shuttle and an overhead collision at a narrow takeoff. The carrier and server support now share footprint-aware checks, with a strict 0.2-second history of actual server-authored shuttle poses. A clear jump lane and one Helix section rotation remove the overhead conflicts. The final run above uses those changes; earlier failed attempts are retained and are not counted as passes.
+The actual shipped hold helper canceled on early release and menu opening, displayed progress, and generated exactly one ManualRestart during a full hold, with no repeat while still held. Fill samples were 32% before short release, 35% before menu cancellation and 50% at full-hold midpoint. Zero game-script runtime errors were detected. This intentional restart is separate from the zero unexpected traversal resets.
 
-The optional post-completion smoke setup walked normally around the fountain to the shop NPC and logged `lobby_shop_ready` at a distance of 8.13 studs. This proves arrival within the prompt's 10-stud range; it does not by itself prove that the shop opened or a purchase succeeded.
+The failed hold smoke at the end of the older traversal remains diagnostic history. It was not counted as passing. The separate successful hold session is bound by its own artifact hash, complete source fingerprint and exact log/session boundaries.
 
-During the original gameplay task, Codex then visually tested the real shop and inventory in the same native Studio session: buying SOLAR for 120 coins reduced the earned balance from 132 to 12, automatically equipped SOLAR, and added it alongside ION in Inventory. Equipping ION and then SOLAR both updated successfully. This was an isolated Studio profile, not a live persistent purchase or Robux transaction.
+## Source-bound regressions
 
-The separate UI smoke artifact `npc-ui-1790246402` used a 180-second intermission to leave time for the physical prompt test. It retained the production geometry and gameplay source, adding only the Studio test configuration and an ordinary Humanoid walking driver. The driver walked around the fountain to MILO, logged `npc_ready` at 7.59 studs and released controls. During that original task, Codex observed MILO's **E Browse** prompt, pressed E and visually confirmed that the **TRAIL STUDIO** shop drawer opened with the expected items and prices. This UI-only test did not replace the route artifact or change the production place.
+- 41 movement/lifecycle traces, including ordinary movement without automatic correction and bounded non-finite recovery.
+- 91 finish/lifecycle checks, including ten simulated entrants, ranks, reward deduplication and grounded finish contact.
+- 30 server moving-support checks, 35 client carry checks and 18 readiness checks.
+- 86 clock checks covering delayed/reordered snapshots and varied render rates.
+- 52 profile/rule checks covering migration, storage failure and Updraft recharge.
+- Seven shuttle-corner trajectory replays with 0.1-0.5 s delayed rider poses.
+- 78 hold-reset input/state checks and 68 dialogue/lifecycle checks.
+- 54 camera planner/obstruction checks, including rotated and nonquery decoration.
+- Six geometry groups covering 339 primary/alternate avatar corridors.
+- All ten embedded production scripts/modules match the shipped source files.
 
-## Boundaries
+Full source hashes and evidence are in verification-results.json. Failed or interrupted sessions do not fill gaps in the passing sessions.
 
-- No live publication, real Robux transaction or purchase receipt fulfillment was tested.
-- Studio uses isolated session profiles; live persistence must be checked separately after deployment.
-- Ten-player logic checks do not measure a real ten-client server's performance or network behavior.
-- Real mobile devices, controller hardware, unusual avatar bundles, high latency and player retention still need playtesting.
-- Automated traversal proves a possible route under the tested conditions. It cannot establish that every player will find the difficulty enjoyable or that every optional hazard phase was explored.
+## Limits
+
+Local Studio evidence only. No real ten-client load test, physical mobile/controller test, unusual avatar-bundle test, live persistence test or purchase-receipt test was performed. Native hold UI calls the shipped helper; actual hardware wiring is covered by extracted-source tests. Traversal proves a possible route, not error-free behavior for every movement or network condition. Human playtesting remains useful for difficulty, enjoyment and additional edge cases. Robux purchases remain disabled.
+
+## GitHub refresh — 8 October 2026
+
+The refresh rebuilt the production place byte-for-byte, verified all ten embedded sources and reran the [portable regression suites](../tests/README.md): 560 deterministic checks/replays, six geometry groups and the separate camera geometry audit passed. The original native route and hold-UI artifacts were independently revalidated against current source and geometry. No new native Studio session was run during this refresh. [PUBLICATION-VERIFICATION.json](PUBLICATION-VERIFICATION.json) records the refresh checks separately from the archived gameplay evidence above.

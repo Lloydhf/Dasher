@@ -1,54 +1,485 @@
 {
-  "date": "2026-09-24",
-  "version": "0.5.0",
-  "sourcePackage": "Dasher-Ascent-0.5",
-  "productionPlaceSha256": "b643dd193ee79a5a63986d73621df74943d1ec15141999c009db143c963c0a2f",
+  "date": "2026-10-08",
+  "version": "0.7.0",
+  "productionPlaceSha256": "98999c7b3eced7e651d430da3802652c5d40162b280895955003c0ef0b4e5a1b",
   "byteIdenticalRebuild": true,
-  "embeddedSourceMatches": 8,
-  "uniqueInstanceReferences": 3233,
+  "embeddedSourceMatches": 10,
+  "uniqueInstanceReferences": 3910,
   "allGameplaySourcesCompile": true,
   "qaScriptsInProductionPlace": 0,
-  "logicChecksPassed": 201,
+  "deterministicChecksAndReplays": 560,
+  "geometryTestsPassed": 6,
+  "authoredCorridors": 339,
+  "cameraGeometryAuditPassed": true,
   "logicReports": {
-    "finish-regression-results.json": {
-      "version": "0.5.0",
-      "passed": 95,
-      "failed": 0,
-      "scope": "Actual server finish/entrant/round-loop functions and profile/rule modules under deterministic service mocks; not native10-client performance.",
-      "sourceSha256": {
-        "CourseMotion.luau": "991358b79345a928dfc10f77f56259aff3b5689a03945746550abb1ac41f8c76",
-        "DasherServer.server.luau": "894bc5da87d504581f7f68ec61aa69e9c7803b5997b9ee520fee8b5c7b44fe8b",
-        "ProfileStore.luau": "ebe195607a9a6ee701344f353008ceddbbab9b833a6470f2e6ee84286648dfb4",
-        "RoundRules.luau": "803f32660bc15e1f245a10141128a1da2834acc5ec900d6c6d444f1c655f3130",
-        "TowerRules.luau": "744f514e9d3668686296c0dd6e5d8a267b9f96a0cdab8a0ba700d679fed81af8",
-        "WeeklyLeaderboard.luau": "98f9fa92aa6ac011e41701150ff05e596eb93ec465f58c60ad3cfdd58a67bc86"
-      },
-      "harnessSha256": "fcc0afeb1593f9d54cb014c92a85bb4910546353ca0aa93a3197385d3c469ad3"
+    "camera-geometry-results.json": {
+      "passed": true,
+      "lens_radius": 0.85,
+      "conservative": "Visible oriented boxes expanded by the lens radius. Includes CanQuery=false decoration.",
+      "source_sha256": "dfa4c46d4bebbb6a7c3fdd33171899a0df964089e8c79a77a92eeadbc5143855",
+      "validation_sha256": "2548c21e287615b3575b30655dcd0bc26f0790bb57c25d4210b88e740267fe4c",
+      "world_sha256": "9928c63a5e60f482eb700050b4962f5a8c073606ea0c2c8660725ae6000d636b",
+      "courses": {
+        "Helix": {
+          "visible_parts": 530,
+          "nonquery_visible_parts": 421,
+          "old_outside_radius": 116.82465493208187,
+          "old_wall_blocked_samples": 0,
+          "old_sample_count": 49,
+          "variants": [
+            {
+              "side": 1,
+              "clear": true,
+              "from_position": [
+                -20.0,
+                44.0,
+                -26.0
+              ],
+              "to_position": [
+                -12.0,
+                37.0,
+                -18.0
+              ],
+              "problems": []
+            },
+            {
+              "side": -1,
+              "clear": true,
+              "from_position": [
+                20.0,
+                44.0,
+                -26.0
+              ],
+              "to_position": [
+                12.0,
+                37.0,
+                -18.0
+              ],
+              "problems": []
+            },
+            {
+              "side": 0,
+              "clear": true,
+              "from_position": [
+                0.0,
+                44.0,
+                -26.0
+              ],
+              "to_position": [
+                0.0,
+                37.0,
+                -18.0
+              ],
+              "problems": []
+            }
+          ],
+          "selected_side": 1,
+          "handoffs": [
+            {
+              "spawn": [
+                -8,
+                26,
+                -4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                -4,
+                26,
+                -4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                0,
+                26,
+                -4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                4,
+                26,
+                -4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                8,
+                26,
+                -4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                -8,
+                26,
+                4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                -4,
+                26,
+                4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                0,
+                26,
+                4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                4,
+                26,
+                4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                8,
+                26,
+                4
+              ],
+              "clear": true,
+              "problems": []
+            }
+          ],
+          "old_path_diagnostic_only": true,
+          "passed": true
+        },
+        "Canopy": {
+          "visible_parts": 530,
+          "nonquery_visible_parts": 421,
+          "old_outside_radius": 116.82465493208187,
+          "old_wall_blocked_samples": 0,
+          "old_sample_count": 49,
+          "variants": [
+            {
+              "side": 1,
+              "clear": true,
+              "from_position": [
+                8.014066132288667,
+                44.0,
+                -31.808406813723067
+              ],
+              "to_position": [
+                6.692158316653424,
+                37.0,
+                -20.57219038082349
+              ],
+              "problems": []
+            },
+            {
+              "side": -1,
+              "clear": true,
+              "from_position": [
+                32.799837675449496,
+                44.0,
+                -0.41309619238601414
+              ],
+              "to_position": [
+                21.56362124254992,
+                37.0,
+                -1.73500400802126
+              ],
+              "problems": []
+            },
+            {
+              "side": 0,
+              "clear": true,
+              "from_position": [
+                20.406951903869082,
+                44.0,
+                -16.11075150305454
+              ],
+              "to_position": [
+                14.127889779601674,
+                37.0,
+                -11.153597194422375
+              ],
+              "problems": []
+            }
+          ],
+          "selected_side": 1,
+          "handoffs": [
+            {
+              "spawn": [
+                -8,
+                26,
+                -4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                -4,
+                26,
+                -4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                0,
+                26,
+                -4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                4,
+                26,
+                -4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                8,
+                26,
+                -4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                -8,
+                26,
+                4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                -4,
+                26,
+                4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                0,
+                26,
+                4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                4,
+                26,
+                4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                8,
+                26,
+                4
+              ],
+              "clear": true,
+              "problems": []
+            }
+          ],
+          "old_path_diagnostic_only": true,
+          "passed": true
+        },
+        "Reactor": {
+          "visible_parts": 530,
+          "nonquery_visible_parts": 421,
+          "old_outside_radius": 116.82465493208187,
+          "old_wall_blocked_samples": 0,
+          "old_sample_count": 49,
+          "variants": [
+            {
+              "side": 1,
+              "clear": true,
+              "from_position": [
+                20.0,
+                44.0,
+                26.0
+              ],
+              "to_position": [
+                12.0,
+                37.0,
+                18.0
+              ],
+              "problems": []
+            },
+            {
+              "side": -1,
+              "clear": true,
+              "from_position": [
+                -20.0,
+                44.0,
+                26.0
+              ],
+              "to_position": [
+                -12.0,
+                37.0,
+                18.0
+              ],
+              "problems": []
+            },
+            {
+              "side": 0,
+              "clear": true,
+              "from_position": [
+                0.0,
+                44.0,
+                26.0
+              ],
+              "to_position": [
+                0.0,
+                37.0,
+                18.0
+              ],
+              "problems": []
+            }
+          ],
+          "selected_side": 1,
+          "handoffs": [
+            {
+              "spawn": [
+                -8,
+                26,
+                -4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                -4,
+                26,
+                -4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                0,
+                26,
+                -4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                4,
+                26,
+                -4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                8,
+                26,
+                -4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                -8,
+                26,
+                4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                -4,
+                26,
+                4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                0,
+                26,
+                4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                4,
+                26,
+                4
+              ],
+              "clear": true,
+              "problems": []
+            },
+            {
+              "spawn": [
+                8,
+                26,
+                4
+              ],
+              "clear": true,
+              "problems": []
+            }
+          ],
+          "old_path_diagnostic_only": true,
+          "passed": true
+        }
+      }
     },
-    "movement-landing-results.json": {
-      "passed": 23,
-      "scope": "Actual teleport initialization, validateRacer validation prefix, groundSupport, refreshGround and TowerRules; controlled vector/raycast/clock inputs.",
-      "sourceHashes": {
-        "src/server/DasherServer.server.luau": "894bc5da87d504581f7f68ec61aa69e9c7803b5997b9ee520fee8b5c7b44fe8b",
-        "src/server/TowerRules.luau": "744f514e9d3668686296c0dd6e5d8a267b9f96a0cdab8a0ba700d679fed81af8"
-      },
-      "harnessSha256": "ddb559ec0f03df97c1ecfb65970d6a57b458e7df520af99b44b3232d5ebe0b98"
-    },
-    "moving-support-results.json": {
-      "passed": 30,
-      "failed": 0,
-      "scope": "Actual CourseMotion history and server groundSupport with deterministic rigid-transform/raycast mocks; native replication still requires Studio validation.",
-      "sourceHashes": {
-        "src/server/DasherServer.server.luau": "894bc5da87d504581f7f68ec61aa69e9c7803b5997b9ee520fee8b5c7b44fe8b",
-        "src/server/CourseMotion.luau": "991358b79345a928dfc10f77f56259aff3b5689a03945746550abb1ac41f8c76",
-        "src/server/TowerRules.luau": "744f514e9d3668686296c0dd6e5d8a267b9f96a0cdab8a0ba700d679fed81af8"
-      },
-      "harnessSha256": "bec1b204c5785325428749ce0ee0d4e301b2b7beaea4bcb2a45855d4a123154d"
+    "camera-results.json": {
+      "passed": true,
+      "checks": 54,
+      "clientSha256": "dfa4c46d4bebbb6a7c3fdd33171899a0df964089e8c79a77a92eeadbc5143855",
+      "harnessSha256": "9e167589fae14e5fc30f97d36efb120e811209e0756e5c96018dc4c7a827e810",
+      "scope": "Actual shipped planner and guard with deterministic queryable/nonquery rotated-box mocks. Real three-map geometry and native presentation are separate."
     },
     "client-carry-results.json": {
       "passed": true,
       "checks": 35,
-      "clientSha256": "2237b2a847f92fc845590aa0ff4a4bcbcabf6e5e3aa316baad85937e950a7684",
+      "clientSha256": "dfa4c46d4bebbb6a7c3fdd33171899a0df964089e8c79a77a92eeadbc5143855",
       "carryBlockSha256": "2496f866e7a8ac77a104957f208c5d9f84ba6f5b6d2443185069aef7d98e9c8f",
       "harnessSha256": "245d971dac67e4037a2e28c2643d30621bcb1c318af6b1be3cfc1848c9cd5b2c",
       "sourceFunctionsVerified": true,
@@ -60,41 +491,169 @@
     "client-checks.json": {
       "checks": 18,
       "passed": true,
-      "clientSha256": "2237b2a847f92fc845590aa0ff4a4bcbcabf6e5e3aa316baad85937e950a7684",
+      "clientSha256": "dfa4c46d4bebbb6a7c3fdd33171899a0df964089e8c79a77a92eeadbc5143855",
       "harnessSha256": "b0327ee41e7183cc25cfc8208d17bf701bb1995488ce463a3a5a518f4a51fea6",
       "sourceFunctionsVerified": true,
       "details": "PASS 18 client readiness and ranking checks",
       "nativeUiTested": false
+    },
+    "client-dialogue-results.json": {
+      "exit_code": 0,
+      "passed": true,
+      "checks": 68,
+      "stdout": "PASS 68 client dialogue and lifecycle checks\n",
+      "stderr": "",
+      "source": "src/client/DasherClient.client.luau",
+      "sourceSHA256": "dfa4c46d4bebbb6a7c3fdd33171899a0df964089e8c79a77a92eeadbc5143855",
+      "harnessSHA256": "ba03a19eada968537a1b0e5f4293d1e986b55e277640c06087a0309b60591484"
+    },
+    "clock-regression-results.json": {
+      "version": "0.7.0",
+      "passed": 86,
+      "failed": 0,
+      "sharedChecks": 71,
+      "serverPhaseChecks": 15,
+      "scope": "Shipped RoundClock module, plus extracted production beginPhaseClock/waitPhase functions under deterministic heartbeat mocks. Real packet latency and engine timing still require Studio.",
+      "sourceSha256": {
+        "DasherServer.server.luau": "d89624219fa75f171c823f6057c7ffbf570377b4a887adcaa702ddd543734f6e",
+        "RoundClock.luau": "a27ea90c4fb03282b621b3c289e1d1f0a9cc2936b85056b33abe02c3034319e3"
+      },
+      "harnessSha256": "7947fa9eb18709770cade419c5c536bf060f7fe671edb9fddd0e3932d45439fe"
+    },
+    "finish-regression-results.json": {
+      "version": "0.7.0",
+      "passed": 91,
+      "failed": 0,
+      "scope": "Actual server finish/entrant/round-loop functions and profile/rule modules under deterministic service mocks; not native10-client performance.",
+      "sourceSha256": {
+        "CourseMotion.luau": "e30bc5e8b1615399ca009d33995c25a3bdaf68c63ed18f69ce055dfe344b2ff3",
+        "DasherServer.server.luau": "d89624219fa75f171c823f6057c7ffbf570377b4a887adcaa702ddd543734f6e",
+        "ProfileStore.luau": "ebe195607a9a6ee701344f353008ceddbbab9b833a6470f2e6ee84286648dfb4",
+        "RoundRules.luau": "803f32660bc15e1f245a10141128a1da2834acc5ec900d6c6d444f1c655f3130",
+        "TowerRules.luau": "961f54d591457b9d151382f0c0744c5cfd1ae5a212a4cd498b85c78b0e0d0733",
+        "WeeklyLeaderboard.luau": "98f9fa92aa6ac011e41701150ff05e596eb93ec465f58c60ad3cfdd58a67bc86",
+        "RoundClock.luau": "a27ea90c4fb03282b621b3c289e1d1f0a9cc2936b85056b33abe02c3034319e3"
+      },
+      "harnessSha256": "0b01878d4b07af8f3e588b81c0001d39526f48d2d0b31f36d02da27e94d4d64d"
+    },
+    "movement-regression-results.json": {
+      "passed": 41,
+      "failed": 0,
+      "scope": "Actual complete validator, support, teleport and correction under deterministic replicated-pose/raycast mocks; not live multiplayer latency testing.",
+      "sourceHashes": {
+        "src/server/DasherServer.server.luau": "d89624219fa75f171c823f6057c7ffbf570377b4a887adcaa702ddd543734f6e",
+        "src/server/TowerRules.luau": "961f54d591457b9d151382f0c0744c5cfd1ae5a212a4cd498b85c78b0e0d0733"
+      },
+      "harnessSha256": "618dbd2a7fc9f6e2612f57b15cd4c7061a14bb7904a6508e694d703e390f1823"
+    },
+    "moving-support-results.json": {
+      "passed": 30,
+      "failed": 0,
+      "scope": "Actual CourseMotion history and server groundSupport with deterministic rigid-transform/raycast mocks; native replication still requires Studio validation.",
+      "sourceHashes": {
+        "src/server/DasherServer.server.luau": "d89624219fa75f171c823f6057c7ffbf570377b4a887adcaa702ddd543734f6e",
+        "src/server/CourseMotion.luau": "e30bc5e8b1615399ca009d33995c25a3bdaf68c63ed18f69ce055dfe344b2ff3",
+        "src/server/TowerRules.luau": "961f54d591457b9d151382f0c0744c5cfd1ae5a212a4cd498b85c78b0e0d0733"
+      },
+      "harnessSha256": "dd91d7567befe30434d905de631de7dcbf75ec2859c37149509f49e545d9778c"
+    },
+    "profile-rules-results.json": {
+      "version": "0.7.0",
+      "passed": 52,
+      "failed": 0,
+      "exit_code": 0,
+      "scope": "Actual ProfileStore and TowerRules modules under deterministic datastore, time and terrain mocks; no live persistence or multi-client network claim.",
+      "sourceSha256": {
+        "src/server/ProfileStore.luau": "ebe195607a9a6ee701344f353008ceddbbab9b833a6470f2e6ee84286648dfb4",
+        "src/server/TowerRules.luau": "961f54d591457b9d151382f0c0744c5cfd1ae5a212a4cd498b85c78b0e0d0733"
+      },
+      "harness": "server-tests.luau",
+      "harnessSha256": "e36fc19a829cef428edf1793ddc80aee6397d17518b413ba0229c9d33581115f",
+      "sourceFunctionsVerified": true,
+      "details": "SERVER_RULES_PASS 52"
+    },
+    "reset-hold-results.json": {
+      "passed": true,
+      "checks": 78,
+      "kind": "actual shipped hold state machine and extracted client event wiring",
+      "files": {
+        "src\\client\\DasherClient.client.luau": "dfa4c46d4bebbb6a7c3fdd33171899a0df964089e8c79a77a92eeadbc5143855",
+        "src\\shared\\ResetHold.luau": "ef2cb95662dd9273552644cba3490ed49a1b87bb962d7eee9567e3995fa27900"
+      },
+      "scope": [
+        "R/Y/button-A/mouse/touch",
+        "short tap and repeated keydown",
+        "one request per hold",
+        "release and focus recovery",
+        "chat/menu/dialogue/phase/character cancellation",
+        "pointer drag and controller selection",
+        "native reset confirmation",
+        "progress HUD state"
+      ]
+    },
+    "shuttle-latency-results.json": {
+      "passed": 7,
+      "failed": 0,
+      "cases": [
+        {
+          "poseDelaySeconds": 0.1,
+          "longestMissingSupportSeconds": 0.0
+        },
+        {
+          "poseDelaySeconds": 0.2,
+          "longestMissingSupportSeconds": 0.0
+        },
+        {
+          "poseDelaySeconds": 0.3,
+          "longestMissingSupportSeconds": 0.0
+        },
+        {
+          "poseDelaySeconds": 0.35,
+          "longestMissingSupportSeconds": 0.0
+        },
+        {
+          "poseDelaySeconds": 0.4,
+          "longestMissingSupportSeconds": 0.0
+        },
+        {
+          "poseDelaySeconds": 0.45,
+          "longestMissingSupportSeconds": 0.0
+        },
+        {
+          "poseDelaySeconds": 0.5,
+          "longestMissingSupportSeconds": 0.0
+        }
+      ],
+      "scope": "Exact production CourseMotion/groundSupport replay with authored P042 shuttle and corner offset; delayed poses simulated, not native network proof.",
+      "limits": "Zero missing support asserted for the sampled0.1\u20130.5second delays on this corner/trajectory; no promise for arbitrary latency or avatars. Separate history suite rejects expired/foreign/airborne contacts.",
+      "sourceHashes": {
+        "src/server/DasherServer.server.luau": "d89624219fa75f171c823f6057c7ffbf570377b4a887adcaa702ddd543734f6e",
+        "src/server/CourseMotion.luau": "e30bc5e8b1615399ca009d33995c25a3bdaf68c63ed18f69ce055dfe344b2ff3",
+        "src/server/TowerRules.luau": "961f54d591457b9d151382f0c0744c5cfd1ae5a212a4cd498b85c78b0e0d0733"
+      },
+      "harnessSha256": "54bf7b9d4d8d2c02582727742466ab808e66dd913cb84363cde7c706a51b6644"
     }
   },
-  "geometryTestsPassed": 3,
-  "authoredTransitionsChecked": 339,
   "secretAndLocalPathScan": {
-    "scope": "repository files excluding Git internals and ignored test output",
     "findings": 0
   },
   "nativeEvidence": {
-    "source": "Archived original gameplay task, 2026-09-24",
     "revalidated": true,
     "newNativeSessionDuringRefresh": false,
-    "artifact": "native05-1790245491",
-    "artifactSha256": "d6092000df259c9b299db6fb8b55f25b958e75c4beac61eaed47f2837902fe94",
-    "nonScriptGeometryIdentical": true,
-    "resets": 0,
-    "lifts": 24,
-    "runtimeScriptErrors": 0,
-    "towersFinished": [
-      "Helix",
-      "Reactor",
-      "Canopy"
-    ],
-    "canopyLimitation": "P064 landing was not observed: authoritative summit sensor contact ended the race first."
+    "traversalArtifact": "native07-1791378412",
+    "artifactSha256": "cfb29d8b0238736a27a2b643b548283c8060d179d936cdfd4d1c44bab21381a6",
+    "mainPlatforms": 192,
+    "unexpectedResets": 0,
+    "lifts": 25,
+    "gameScriptRuntimeErrors": 0,
+    "holdArtifact": "hold-ui07-1791451292",
+    "countdownRounds": 4
   },
   "robloxPublishedByThisRefresh": false,
   "limitations": [
-    "No new native gameplay session during GitHub refresh",
+    "No new native session during GitHub refresh",
     "No real ten-client load test",
-    "No live persistence or Robux purchase test",
-    "No human difficulty, retention or physical mobile-device study"
+    "No physical mobile/controller hardware, unusual avatar or live persistence/purchase test",
+    "Human difficulty, enjoyment and retention unmeasured"
   ]
 }

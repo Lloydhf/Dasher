@@ -1,7 +1,7 @@
 -- Shared presentation and tuning. Rewards and eligibility are enforced on the server.
 local Config = {}
-Config.Version = "0.5.0"
-Config.CourseVersion = 5 -- New routes archive previous times; coins and unlocks survive.
+Config.Version = "0.7.0"
+Config.CourseVersion = 6 -- New routes archive previous times; coins and unlocks survive.
 Config.WalkSpeed = 20
 Config.JumpPower = 52
 Config.UpdraftSpeed = 88

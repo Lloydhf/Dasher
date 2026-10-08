@@ -1,10 +1,10 @@
 """Actual bounded shuttle history/contact code with rigid-transform service mocks."""
 from pathlib import Path
+from test_paths import ROOT, QA, LUAU, LUAU_COMPILE, TESTS
 import hashlib
 import json
 import re
 import subprocess
-from test_paths import ROOT, QA, LUAU
 
 server = (ROOT / 'src/server/DasherServer.server.luau').read_text(encoding='utf-8-sig')
 motion = (ROOT / 'src/server/CourseMotion.luau').read_text(encoding='utf-8-sig')
@@ -81,10 +81,10 @@ local other={}
 currentRay={Distance=3.08694,Normal=v(0,1,0),Instance=other}
 check(groundSupport(root,humanoid,{},2).Instance==other,'Current physical raycast support always wins over history')
 fixture()
-check(groundSupport(root,humanoid,{},2.049)~=nil,'Valid support remains accepted inside the fixed0.2second history')
-check(groundSupport(root,humanoid,{},2.051)==nil,'Identical pose is rejected immediately after the matching frame expires')
-entry.contactHistory[#entry.contactHistory+1]={at=2.21,pose=part.CFrame}
-check(groundSupport(root,humanoid,{},2.21)==nil,'New clock samples cannot renew an old stationary hovering pose')
+check(groundSupport(root,humanoid,{},2.349)~=nil,'Valid support remains accepted inside the fixed0.5second history')
+check(groundSupport(root,humanoid,{},2.351)==nil,'Identical pose is rejected immediately after the matching frame expires')
+entry.contactHistory[#entry.contactHistory+1]={at=2.51,pose=part.CFrame}
+check(groundSupport(root,humanoid,{},2.51)==nil,'New clock samples cannot renew an old stationary hovering pose')
 fixture() root.Position=v(6,80.5872,26.516)
 check(groundSupport(root,humanoid,{},2)==nil,'Merely being near a past shuttle without footprint overlap gives no support')
 fixture() root.Position=v(10.0269,80.5872,23)
@@ -124,11 +124,11 @@ fixture() root.Position=v(0/0,80.5872,26.516)
 check(groundSupport(root,humanoid,{},2)==nil,'Nonfinite footprint coordinates cannot pass support comparisons')
 fixture() entry.contactHistory={}
 for frameIndex=1,600 do courseMotion:Step(frameIndex/60) end
-check(#entry.contactHistory<=13,'Actual terrain Step bounds history storage to the0.2second window')
+check(#entry.contactHistory<=31,'Actual terrain Step bounds history storage to the0.5second window')
 local newest=entry.contactHistory[#entry.contactHistory]
 check(newest.at==10 and (newest.pose.Position-part.Position).Magnitude<1e-6,'Actual Step records exact server-authored pose and elapsed time')
 local oldest=entry.contactHistory[1]
-check(10-oldest.at<=.2,'Actual Step prunes stale poses by elapsed time')
+check(10-oldest.at<=.5,'Actual Step prunes stale poses by elapsed time')
 courseMotion:Step(100)
 check(#entry.contactHistory==1,'A long heartbeat pause does not retain stale contact history')
 print('[DASHER05_MOVING_SUPPORT] PASS '..checks)

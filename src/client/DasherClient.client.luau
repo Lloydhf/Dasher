@@ -11,6 +11,8 @@ local StarterGui = game:GetService("StarterGui")
 local player = Players.LocalPlayer
 local package = ReplicatedStorage:WaitForChild("Dasher")
 local Config = require(package:WaitForChild("Config"))
+local RoundClock = require(package:WaitForChild("RoundClock"))
+local ResetHold = require(package:WaitForChild("ResetHold"))
 local remotes = package:WaitForChild("Remotes")
 local Action, State, Feedback = remotes:WaitForChild("Action"), remotes:WaitForChild("State"), remotes:WaitForChild("Feedback")
 local C = {ink=Color3.fromRGB(19,23,27), panel=Color3.fromRGB(29,35,40), card=Color3.fromRGB(40,47,52), border=Color3.fromRGB(91,107,115), text=Color3.fromRGB(238,242,241), muted=Color3.fromRGB(162,178,181), cyan=Color3.fromRGB(163,218,197), gold=Color3.fromRGB(255,214,143), red=Color3.fromRGB(255,139,154), green=Color3.fromRGB(163,218,197), lilac=Color3.fromRGB(162,191,211), paper=Color3.fromRGB(238,242,241)}
@@ -26,10 +28,11 @@ local spectatorExitPending = false
 local spectatorExitRequestAt = -100
 local altitudeDots = {}
 local snapshot = {phase="Waiting",coins=0,owned={ice=true},equipped="ice",progress=0,finishers={},racers={}}
-local receivedAt = os.clock()
 local reducedMotion, muted, menuOpen = false, false, false
 local menuPage = "Home"
 local lastRestartAt = -100
+local resetHold, resetFocused, resetPointer = ResetHold.New(), true, nil
+local resetKeyInputs = {}
 local lastFinished, lastCamera = nil, nil
 local cinematic, spectateTarget = nil, nil
 local introPlayed = false
@@ -40,7 +43,9 @@ local previewParticles, raceRows, stationBindings = {}, {}, {}
 local particleStyles, particleStyleById
 local rankButton, updateRaceBoard
 local ui = {}
-local openMenu, closeMenu, restoreCamera, setSpectate, renderVotes
+local openMenu, closeMenu, restoreCamera, setSpectate, renderVotes, openDialogue, closeDialogue
+local dialogue = {active=nil,serial=0,rigs={},lastPoseAt=0}
+local countdownPresentation = {text="",goUntil=0}
 local function make(className,parent,props)
  local item=Instance.new(className)
  for key,value in pairs(props or {}) do item[key]=value end
@@ -59,9 +64,11 @@ local function center(item) item.TextXAlignment=Enum.TextXAlignment.Center retur
 local function button(parent,text,size,position,color)
  local item=make("TextButton",parent,{Size=size,Position=position,Text=text,TextSize=16,FontFace=regularFont,TextColor3=color and C.ink or C.text,BackgroundColor3=color or C.panel,BorderSizePixel=0,AutoButtonColor=false,Selectable=true})
  round(item,9) local outline=stroke(item,color or C.border,color and 0.8 or 0.45)
+ local scale=make("UIScale",item,{Scale=1})
  local function hover(active)
   if not item.Parent then return end
   TweenService:Create(outline,TweenInfo.new(reducedMotion and 0 or 0.13),{Transparency=active and 0.08 or 0.6}):Play()
+  TweenService:Create(scale,TweenInfo.new(reducedMotion and 0 or .16,Enum.EasingStyle.Quad),{Scale=active and not reducedMotion and 1.015 or 1}):Play()
  end
  item.MouseEnter:Connect(function() hover(true) end) item.MouseLeave:Connect(function() hover(false) end)
  item.SelectionGained:Connect(function() hover(true) end) item.SelectionLost:Connect(function() hover(false) end)
@@ -110,7 +117,13 @@ ui.updraft.key.BackgroundColor3=C.card ui.updraft.key.BackgroundTransparency=0 r
 ui.updraft.title=label(ui.updraft.button,"UPDRAFT",UDim2.fromOffset(135,21),UDim2.fromOffset(50,8),15,C.text,true)
 ui.updraft.cooldown=label(ui.updraft.button,"READY",UDim2.fromOffset(135,16),UDim2.fromOffset(50,29),12,C.muted)
 ui.updraft.bar=make("Frame",ui.updraft.button,{Size=UDim2.new(1,-20,0,2),Position=UDim2.new(0,10,1,-5),BackgroundColor3=C.cyan,BorderSizePixel=0}) ui.updraft.color=C.cyan
-local restartButton=button(root,"RESET R",UDim2.fromOffset(80,28),UDim2.new(0,14,1,-42)) restartButton.TextSize=12
+local restartButton=button(root,"",UDim2.fromOffset(140,38),UDim2.new(0,14,1,-52)) restartButton.Name="HoldToReset"
+ui.resetKey=center(label(restartButton,"R",UDim2.fromOffset(23,23),UDim2.fromOffset(8,6),12,C.muted,true))
+ui.resetKey.BackgroundColor3=C.card ui.resetKey.BackgroundTransparency=0 round(ui.resetKey,5)
+ui.resetTitle=label(restartButton,"HOLD TO RESET",UDim2.new(1,-43,0,24),UDim2.fromOffset(37,5),11,C.muted)
+ui.resetTrack=make("Frame",restartButton,{Name="HoldTrack",Size=UDim2.new(1,-16,0,3),Position=UDim2.new(0,8,1,-6),BackgroundColor3=C.card,BorderSizePixel=0}) round(ui.resetTrack,3)
+ui.resetFill=make("Frame",ui.resetTrack,{Name="HoldProgress",Size=UDim2.fromScale(0,1),BackgroundColor3=C.gold,BorderSizePixel=0}) round(ui.resetFill,3)
+ui.resetHint=label(root,"Release to cancel",UDim2.fromOffset(132,16),UDim2.new(0,14,1,-73),11,C.gold) ui.resetHint.Visible=false
 ui.run=center(label(root,"",UDim2.fromOffset(200,18),UDim2.new(.5,-100,1,-92),12,C.muted))
 ui.onboarding=make("Frame",root,{Name="ClimbHint",Size=UDim2.fromOffset(320,46),Position=UDim2.new(.5,-160,0,76),BackgroundTransparency=1})
 ui.onboardTitle=center(label(ui.onboarding,"YOUR ROUTE. YOUR RACE.",UDim2.new(1,0,0,23),UDim2.fromOffset(0,0),16,C.text,true))
@@ -118,6 +131,7 @@ ui.onboardText=center(label(ui.onboarding,"Q to lift  /  choose your next landin
 local accelerateButton=button(root,"BOOST CLOCK",UDim2.fromOffset(148,36),UDim2.new(0.5,7,0,78),C.gold) accelerateButton.Visible=false
 ui.watch=button(root,"WATCH RACE",UDim2.fromOffset(148,36),UDim2.new(0.5,-155,0,78)) ui.watch.Visible=false
 ui.countdown=center(label(root,"",UDim2.fromOffset(240,96),UDim2.new(0.5,-120,0.35,-48),64,C.text,true)) ui.countdown.Visible=false
+ui.countdown.Name="StartCountdown" ui.countdownScale=make("UIScale",ui.countdown,{Scale=1})
 ui.toast=panel(root,"Toast",UDim2.fromOffset(420,44),UDim2.new(0.5,-210,0,132)) ui.toast.Visible=false ui.toast.ZIndex=60
 ui.toastText=wrap(center(label(ui.toast,"",UDim2.new(1,-24,1,-8),UDim2.fromOffset(12,4),15,C.text,true))) ui.toastText.ZIndex=61
 ui.vote=panel(root,"MapVote",UDim2.fromOffset(486,138),UDim2.new(0.5,-243,1,-162)) ui.vote.Visible=false
@@ -137,6 +151,8 @@ ui.resultClose=button(ui.result,"X",UDim2.fromOffset(28,28),UDim2.new(1,-40,0,8)
 ui.skip=button(root,"SKIP INTRO",UDim2.fromOffset(116,32),UDim2.new(0.5,-58,1,-58)) ui.skip.Visible=false ui.skip.ZIndex=25 ui.skip.TextSize=14
 local scrim=make("TextButton",root,{Name="ModalScrim",Size=UDim2.fromScale(1,1),BackgroundColor3=Color3.new(0,0,0),BackgroundTransparency=0.35,BorderSizePixel=0,Text="",AutoButtonColor=false,Visible=false,ZIndex=30,Selectable=false})
 local modal=make("CanvasGroup",root,{Name="Menu",Size=UDim2.fromOffset(608,486),Position=UDim2.new(0.5,-304,0.5,-243),BackgroundColor3=C.panel,BorderSizePixel=0,ZIndex=31,Visible=false}) round(modal,16) stroke(modal)
+ui.menuAccent=make("Frame",modal,{Name="PageAccent",Size=UDim2.new(1,-40,0,2),Position=UDim2.fromOffset(20,0),BackgroundColor3=C.cyan,BorderSizePixel=0,ZIndex=35})
+make("UIGradient",ui.menuAccent,{Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1),NumberSequenceKeypoint.new(.25,0),NumberSequenceKeypoint.new(.75,0),NumberSequenceKeypoint.new(1,1)})})
 ui.modalTitle=label(modal,"DASHER",UDim2.new(1,-86,0,30),UDim2.fromOffset(22,16),24,C.text,true)
 ui.modalSubtitle=label(modal,"",UDim2.new(1,-44,0,25),UDim2.fromOffset(22,48),15,C.muted)
 ui.close=button(modal,"X",UDim2.fromOffset(34,34),UDim2.new(1,-52,0,17))
@@ -148,6 +164,24 @@ make("UIPadding",scroll,{PaddingLeft=UDim.new(0,3),PaddingRight=UDim.new(0,7),Pa
 local audioGroup=make("SoundGroup",SoundService,{Name="DasherLocalAudio",Volume=1})
 local liftSound=make("Sound",SoundService,{Name="AscentLift",SoundId="rbxasset://sounds/action_jump.mp3",Volume=0.18,PlaybackSpeed=1.75,SoundGroup=audioGroup})
 local finishSound=make("Sound",SoundService,{Name="DasherFinish",SoundId="rbxasset://sounds/volume_slider.ogg",Volume=0.3,PlaybackSpeed=1.1,SoundGroup=audioGroup})
+-- Conversations stay local: a choice can open a page, never award coins/items.
+do
+ ui.dialogue=make("CanvasGroup",root,{Name="NPCConversation",Size=UDim2.fromOffset(620,218),Position=UDim2.new(.5,-310,1,-242),BackgroundColor3=C.ink,BorderSizePixel=0,ZIndex=45,Visible=false})
+ round(ui.dialogue,16) stroke(ui.dialogue,C.cyan,.4)
+ ui.dialoguePortrait=make("ViewportFrame",ui.dialogue,{Name="MerchantPortrait",Size=UDim2.fromOffset(112,170),Position=UDim2.fromOffset(12,12),BackgroundColor3=C.card,BorderSizePixel=0,Ambient=Color3.fromRGB(196,212,222),LightColor=Color3.fromRGB(255,244,217),LightDirection=Vector3.new(-1,-1,-1)}) round(ui.dialoguePortrait,12)
+ ui.dialogueSpeaker=label(ui.dialogue,"",UDim2.new(1,-190,0,28),UDim2.fromOffset(142,14),23,C.text,true) ui.dialogueSpeaker.Name="Speaker"
+ ui.dialogueRole=label(ui.dialogue,"",UDim2.new(1,-190,0,18),UDim2.fromOffset(143,43),12,C.cyan)
+ ui.dialogueText=make("TextButton",ui.dialogue,{Name="Speech",Size=UDim2.new(1,-165,0,77),Position=UDim2.fromOffset(142,70),Text="",TextSize=17,FontFace=regularFont,TextColor3=C.text,BackgroundTransparency=1,BorderSizePixel=0,TextWrapped=true,TextXAlignment=Enum.TextXAlignment.Left,TextYAlignment=Enum.TextYAlignment.Top,AutoButtonColor=false,Selectable=true,MaxVisibleGraphemes=-1})
+ ui.dialogueHint=label(ui.dialogue,"Tap the words to reveal",UDim2.new(1,-166,0,17),UDim2.fromOffset(142,144),11,C.muted)
+ ui.dialogueClose=button(ui.dialogue,"X",UDim2.fromOffset(30,30),UDim2.new(1,-42,0,12)) ui.dialogueClose.Name="LeaveConversation"
+ ui.dialogueChoices=make("Frame",ui.dialogue,{Name="Choices",Size=UDim2.new(1,-40,0,36),Position=UDim2.new(0,20,1,-49),BackgroundTransparency=1})
+ ui.dialogueButtons={}
+ for index=1,3 do
+  local choice=button(ui.dialogueChoices,"",UDim2.new(1/3,-6,1,0),UDim2.new((index-1)/3,(index-1)*3,0,0),index==1 and C.cyan or nil)
+  choice.Name="Choice"..index choice.TextSize=13 ui.dialogueButtons[index]=choice
+ end
+ for _,item in ipairs(ui.dialogue:GetDescendants()) do if item:IsA("GuiObject") then item.ZIndex=46 end end
+end
 local function showToast(message,color,duration)
  toastSerial+=1 local serial=toastSerial
  ui.toastText.Text=tostring(message or "") ui.toastText.TextColor3=color or C.text ui.toast.Visible=true
@@ -244,7 +278,127 @@ local function updateQuestControls()
  if questControls.weekly then questControls.weekly.Text=p.weeklyClaimed and "CLAIMED" or ((p.weeklyProgress or 0)>=(p.weeklyTarget or 10) and "CLAIM" or "IN PROGRESS") end
  if questControls.progress then questControls.progress.Text=string.format("Finish %d courses  /  %d of %d",p.weeklyTarget or 10,p.weeklyProgress or 0,p.weeklyTarget or 10) end
 end
+-- Map reveals are planned from the actual opening route, inside the tower.
+-- Visible geometry is queried separately from gameplay collision: decoration
+-- must not swallow the lens, while transparent sensors must not block it.
+local mapIntroCamera={radius=.85,axes={"X","Y","Z"}}
+function mapIntroCamera.decorDistance(guard,origin,direction)
+ local nearest=nil local distance=direction.Magnitude
+ for _,part in ipairs(guard.decor) do
+  if part.Parent then
+   -- Camera-only broad phase, then a conservative sphere-expanded oriented
+   -- box. Do not enable CanQuery on decoration: gameplay raycasts share it.
+   local offset=part.Position-origin
+   local along=distance>.001 and math.clamp(offset:Dot(direction)/(distance*distance),0,1) or 0
+   local broadRadius=part.Size.Magnitude*.5+mapIntroCamera.radius
+   if (offset-direction*along).Magnitude<=broadRadius then
+    local a=part.CFrame:PointToObjectSpace(origin)
+    local b=part.CFrame:VectorToObjectSpace(direction)
+    local extent=part.Size*.5+Vector3.new(mapIntroCamera.radius,mapIntroCamera.radius,mapIntroCamera.radius)
+    local near,far,intersects=0,1,true
+    for _,axis in ipairs(mapIntroCamera.axes) do
+     if math.abs(b[axis])<.00001 then
+      if math.abs(a[axis])>extent[axis] then intersects=false break end
+     else
+      local low,high=(-extent[axis]-a[axis])/b[axis],(extent[axis]-a[axis])/b[axis]
+      if low>high then low,high=high,low end
+      near,far=math.max(near,low),math.min(far,high)
+      if near>far then intersects=false break end
+     end
+    end
+    if intersects then nearest=math.min(nearest or math.huge,near*distance) end
+   end
+  end
+ end
+ return nearest
+end
+function mapIntroCamera.blocked(guard,position)
+ return #workspace:GetPartBoundsInRadius(position,mapIntroCamera.radius,guard.overlap)>0
+  or mapIntroCamera.decorDistance(guard,position,Vector3.zero)~=nil
+end
+function mapIntroCamera.cast(guard,origin,direction)
+ if direction.Magnitude<.001 then return nil end
+ local hit=workspace:Spherecast(origin,mapIntroCamera.radius,direction,guard.rays)
+ local decorDistance=mapIntroCamera.decorDistance(guard,origin,direction)
+ if decorDistance and (not hit or decorDistance<hit.Distance) then return {Distance=decorDistance} end
+ return hit
+end
+function mapIntroCamera.position(guard,position,focus,previous)
+ if not guard.map.Parent then return nil end
+ local horizontal=Vector3.new(position.X-guard.center.X,0,position.Z-guard.center.Z)
+ if horizontal.Magnitude>guard.limit then
+  horizontal=horizontal.Unit*guard.limit
+  position=Vector3.new(guard.center.X+horizontal.X,position.Y,guard.center.Z+horizontal.Z)
+ end
+ if mapIntroCamera.blocked(guard,focus) then return nil end
+ -- Shorten the focus-to-lens arm before an occluder, including a wall or an
+ -- upper landing. Distance is the travelled sphere-centre distance.
+ local arm=position-focus
+ if arm.Magnitude<2 then return nil end
+ local hit=mapIntroCamera.cast(guard,focus,arm)
+ if hit then
+  if hit.Distance<2.3 then return nil end
+  position=focus+arm.Unit*(hit.Distance-.3)
+ end
+ -- The smooth handoff also sweeps the lens. A safe endpoint alone would not
+ -- stop an interpolated camera from passing through a beam between frames.
+ if previous then
+  local travel=position-previous
+  if travel.Magnitude>.001 then
+   local obstruction=mapIntroCamera.cast(guard,previous,travel)
+   if obstruction then position=previous+travel.Unit*math.max(0,obstruction.Distance-.3) end
+  end
+ end
+ if mapIntroCamera.blocked(guard,position) then return nil end
+ arm=position-focus
+ if arm.Magnitude<2 or mapIntroCamera.cast(guard,focus,arm) then return nil end
+ return position
+end
+function mapIntroCamera.plan(map,start)
+ local course=map:FindFirstChild("Course")
+ local firstModel=course and course:FindFirstChild("P001")
+ local first=firstModel and firstModel:FindFirstChild("Walkable")
+ if not first or not first:IsA("BasePart") then return nil end
+ local forward=Vector3.new(first.Position.X-start.Position.X,0,first.Position.Z-start.Position.Z)
+ if forward.Magnitude<1 then return nil end
+ forward=forward.Unit local right=Vector3.new(-forward.Z,0,forward.X)
+ local visible,decor={},{}
+ for _,part in ipairs(map:GetDescendants()) do
+  if part:IsA("BasePart") and part.Transparency<.95 then
+   table.insert(visible,part)
+   if not part.CanQuery then table.insert(decor,part) end
+  end
+ end
+ local rays=RaycastParams.new() rays.FilterType=Enum.RaycastFilterType.Include rays.FilterDescendantsInstances=visible rays.RespectCanCollide=false
+ local overlap=OverlapParams.new() overlap.FilterType=Enum.RaycastFilterType.Include overlap.FilterDescendantsInstances=visible overlap.RespectCanCollide=false overlap.MaxParts=1
+ local bounds=map:FindFirstChild("Bounds")
+ local limit=bounds and bounds:IsA("BasePart") and math.min(bounds.Size.X,bounds.Size.Z)*.5-10 or 60
+ local guard={map=map,rays=rays,overlap=overlap,decor=decor,center=start.Position,limit=math.clamp(limit,24,66)}
+ local routeFocus,routeCount=Vector3.zero,0
+ for index=1,4 do
+  local model=course:FindFirstChild(string.format("P%03d",index))
+  local landing=model and model:FindFirstChild("Walkable")
+  if landing and landing:IsA("BasePart") then routeFocus+=landing.Position+Vector3.new(0,landing.Size.Y*.5+3.5,0) routeCount+=1 end
+ end
+ local focus=routeFocus/math.max(1,routeCount)
+ for _,side in ipairs({1,-1,0}) do
+  local from=start.Position-forward*26+right*(side*20)+Vector3.new(0,18,0)
+  local to=start.Position-forward*18+right*(side*12)+Vector3.new(0,11,0)
+  local clear=true local previous=nil
+  for step=0,12 do
+   local desired=from:Lerp(to,step/12)
+   local safe=mapIntroCamera.position(guard,desired,focus,previous)
+   if not safe or (safe-desired).Magnitude>.1 then clear=false break end
+   previous=safe
+  end
+  if clear then return {from=from,to=to,focus=focus,guard=guard} end
+ end
+ -- If a streamed/custom course cannot provide a clear reveal, keep Roblox's
+ -- ordinary camera. A wall-facing flyover is never a required loading step.
+ return nil
+end
 restoreCamera=function()
+ local oldFrame=cinematic
  local leavingCinematic=cinematic~=nil
  cinematic=nil spectateTarget=nil cameraKick=0 ui.skip.Visible=false ui.spectator.Visible=false
  local camera=workspace.CurrentCamera
@@ -258,7 +412,9 @@ restoreCamera=function()
    local forward=Vector3.new(rootPart.CFrame.LookVector.X,0,rootPart.CFrame.LookVector.Z)
    forward=forward.Magnitude>.01 and forward.Unit or Vector3.new(0,0,-1)
    local focus=rootPart.Position+Vector3.new(0,2,0)
-   camera.CFrame=CFrame.lookAt(rootPart.Position-forward*18+Vector3.new(0,9,0),focus)
+   local position=rootPart.Position-forward*18+Vector3.new(0,9,0)
+   if oldFrame and oldFrame.guard then position=mapIntroCamera.position(oldFrame.guard,position,focus,oldFrame.lastPosition) or camera.CFrame.Position end
+   camera.CFrame=CFrame.lookAt(position,focus)
    camera.Focus=CFrame.new(focus)
   end
   local humanoid=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
@@ -266,9 +422,10 @@ restoreCamera=function()
   camera.CameraType=Enum.CameraType.Custom
  end
 end
-local function beginCinematic(from,to,lookAt,duration)
- if reducedMotion or menuOpen or snapshot.phase=="Racing" or not workspace.CurrentCamera then return end
- restoreCamera() cinematic={from=from,to=to,lookAt=lookAt,started=os.clock(),duration=duration}
+local function beginCinematic(from,to,lookAt,duration,guard)
+ ResetHold.Cancel(resetHold)
+ if reducedMotion or menuOpen or dialogue.active or snapshot.phase=="Racing" or not workspace.CurrentCamera then return end
+ restoreCamera() cinematic={from=from,to=to,lookAt=lookAt,started=os.clock(),duration=duration,guard=guard,lastPosition=guard and from or nil}
  workspace.CurrentCamera.CameraType=Enum.CameraType.Scriptable ui.skip.Visible=true
 end
 local function playLobbyIntro()
@@ -287,10 +444,9 @@ local function playMapIntro(roundId)
    task.wait(0.1) map=workspace:FindFirstChild("ActiveMap") start=map and map:FindFirstChild("Start",true)
   end
   if snapshot.phase~="Countdown" or snapshot.roundId~=roundId or not start or not start:IsA("BasePart") then return end
-  local finish=map:FindFirstChild("Finish",true)
-  local towerHeight=finish and finish:IsA("BasePart") and math.max(40,finish.Position.Y-start.Position.Y) or 150
-  local focus=Vector3.new(0,start.Position.Y+math.min(towerHeight*.4,64),0)
-  beginCinematic(Vector3.new(72,start.Position.Y+54,92),Vector3.new(46,start.Position.Y+34,64),focus,math.min(4,math.max(.8,(snapshot.timeLeft or 8)-1.2)))
+  local shot=mapIntroCamera.plan(map,start)
+  local duration=math.min(4,RoundClock.Remaining(snapshot,workspace:GetServerTimeNow())-3.15)
+  if duration>=.8 and shot then beginCinematic(shot.from,shot.to,shot.focus,duration,shot.guard) end
  end)
 end
 local function spectatorCandidates()
@@ -319,12 +475,17 @@ closeMenu=function()
  end
 end
 openMenu=function(page)
+ if snapshot.phase=="Countdown" then return end
+ ResetHold.Cancel(resetHold)
+ if dialogue.active then closeDialogue(true) end
  if cinematic then restoreCamera() end
+ local wasOpen=menuOpen
  menuSerial+=1 menuOpen=true menuPage=page or "Home" shopButtons={} questControls={} previewParticles={} raceRows={} 
  for _,item in ipairs(scroll:GetChildren()) do if item:IsA("GuiObject") then item:Destroy() end end
  scroll.CanvasPosition=Vector2.zero modal.Visible=true scrim.Visible=true modal.GroupTransparency=reducedMotion and 0 or 1
- if not reducedMotion then modal.Position=UDim2.new(1,20,(ui.drawerPosition or modal.Position).Y.Scale,(ui.drawerPosition or modal.Position).Y.Offset) end
- TweenService:Create(modal,TweenInfo.new(reducedMotion and 0 or .28,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{GroupTransparency=0,Position=ui.drawerPosition or modal.Position}):Play()
+ if not reducedMotion and not wasOpen then modal.Position=UDim2.new(1,20,(ui.drawerPosition or modal.Position).Y.Scale,(ui.drawerPosition or modal.Position).Y.Offset) end
+ if wasOpen then modal.GroupTransparency=reducedMotion and 0 or .24 end
+ TweenService:Create(modal,TweenInfo.new(reducedMotion and 0 or (wasOpen and .18 or .28),Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{GroupTransparency=0,Position=ui.drawerPosition or modal.Position}):Play()
  ui.modalTitle.Text=string.upper(menuPage) ui.modalSubtitle.Text="Choose your route. Race to the summit."
  if menuPage=="Shop" or menuPage=="Inventory" then
   ui.modalTitle.Text=menuPage=="Shop" and "TRAIL STUDIO" or "YOUR COLLECTION"
@@ -416,7 +577,11 @@ openMenu=function(page)
   textCard("EARN YOUR NEXT EFFECT","Each stage awards coins and XP once per round. Falling does not let you repeat a stage reward. Reach the summit for a finish bonus.",3,118)
  else
   local p=snapshot.progression or {} ui.modalTitle.Text="DASHER" ui.modalSubtitle.Text="Level "..tostring(p.level or 1).."  /  "..coinText(snapshot.coins).." coins"
-  textCard("REACH THE ROOFTOP","Choose your route. Q lifts you higher. Reach the summit to finish.",1,116)
+  local hero=menuCard(132,1)
+  make("UIGradient",hero,{Rotation=20,Color=ColorSequence.new(C.cyan:Lerp(C.card,.82),C.card)})
+  label(hero,"YOUR NEXT ASCENT",UDim2.new(1,-32,0,20),UDim2.fromOffset(16,13),11,C.cyan,true)
+  label(hero,snapshot.mapName or "FIND YOUR ROUTE",UDim2.new(1,-32,0,30),UDim2.fromOffset(16,36),24,C.text,true)
+  wrap(label(hero,"One lift. Many ways up.\nMeet the crew between races.",UDim2.new(1,-32,0,43),UDim2.fromOffset(16,76),15,C.muted)) setModalLayer(hero)
   local shortcuts={{snapshot.phase=="Racing" and "LIVE RACE" or "LAST RESULTS",snapshot.phase=="Racing" and "Race" or "Results"},{"YOUR EFFECTS","Inventory"},{"TRAIL COLLECTION","Shop"},{"YOUR CHALLENGES","Quests"},{snapshot.phase=="Racing" and "WATCH THE RACE" or "WEEKLY LEADERS","Watch"},{"HOW TO PLAY","Help"}}
   for index,item in ipairs(shortcuts) do
    local card=menuCard(53,index+2) local key=(item[2]=="Watch" and snapshot.phase~="Racing") and "Leaderboard" or item[2]
@@ -424,12 +589,152 @@ openMenu=function(page)
    make("UIPadding",shortcut,{PaddingLeft=UDim.new(0,12)}) shortcut.Activated:Connect(function() openMenu(key) end) setModalLayer(card)
   end
  end
- for _,tab in ipairs(navigation:GetChildren()) do if tab:IsA("TextButton") then tab.BackgroundColor3=tab.Name==menuPage and C.cyan or C.card tab.TextColor3=tab.Name==menuPage and C.ink or C.text end end
+ for _,tab in ipairs(navigation:GetChildren()) do
+  if tab:IsA("TextButton") then
+   TweenService:Create(tab,TweenInfo.new(reducedMotion and 0 or .16),{BackgroundColor3=tab.Name==menuPage and C.cyan or C.card,TextColor3=tab.Name==menuPage and C.ink or C.text}):Play()
+   local marker=tab:FindFirstChild("ActivePage") if marker then marker.Visible=tab.Name==menuPage end
+  end
+ end
  setModalLayer(modal)
  if UserInputService.GamepadEnabled then GuiService.SelectedObject=ui.close end
 end
+local function dialogueAllowed(state)
+ return state.phase=="Waiting" or state.phase=="Intermission" or state.phase=="Results"
+end
+local function readStationValue(part,name,fallback)
+ local value=part:FindFirstChild(name)
+ return value and value:IsA("StringValue") and value.Value or fallback
+end
+local function captureNPCRig(model,rootPart)
+ local rig={model=model,root=rootPart,parts={},pivots={Head=Vector3.new(0,1.72,0),LeftArm=Vector3.new(-1.15,.9,0),RightArm=Vector3.new(1.15,.9,0)},phase=math.abs(rootPart.Position.X*.43+rootPart.Position.Z*.21)}
+ for group,pivot in pairs(rig.pivots) do
+  local marker=rootPart:FindFirstChild("NPC"..group.."Pivot")
+  if marker and marker:IsA("Vector3Value") then rig.pivots[group]=marker.Value end
+ end
+ for _,part in ipairs(model:GetDescendants()) do
+  local tag=part:IsA("BasePart") and part:FindFirstChild("NPCMotion")
+  if tag and tag:IsA("StringValue") then table.insert(rig.parts,{part=part,group=tag.Value,base=rootPart.CFrame:ToObjectSpace(part.CFrame)}) end
+ end
+ return rig
+end
+local function poseNPCRig(rig,now,target,talking)
+ if not rig.model.Parent or not rig.root.Parent then return end
+ local yaw,pitch=0,0
+ if target then
+  local offset=rig.root.CFrame:PointToObjectSpace(target)-rig.pivots.Head
+  yaw=math.clamp(math.atan2(offset.X,offset.Z),-.65,.65)
+  pitch=-math.clamp(math.atan2(offset.Y,math.max(1,Vector2.new(offset.X,offset.Z).Magnitude)),-.22,.22)
+ end
+ local motion=reducedMotion and 0 or 1
+ local breath=math.sin(now*1.65+rig.phase)*.028*motion
+ local talk=dialogue.active and math.max(0,1-(now-dialogue.active.started)/1.8) or 0
+ for _,entry in ipairs(rig.parts) do
+  if entry.part.Parent then
+   local group=entry.group local pivot=rig.pivots[group]
+   local transform=CFrame.new(0,breath,0)
+   if group=="Head" then
+    transform*=CFrame.new(pivot)*CFrame.Angles(pitch,yaw,0)*CFrame.new(-pivot)
+   elseif group=="LeftArm" or group=="RightArm" then
+    local side=group=="LeftArm" and -1 or 1
+    local gesture=talking and group=="RightArm" and talk*math.rad(32)*motion or 0
+    local sway=math.sin(now*1.3+rig.phase)*.025*motion
+    transform*=CFrame.new(pivot)*CFrame.Angles(-gesture+sway,0,side*(.02*motion+gesture*.45))*CFrame.new(-pivot)
+   end
+   entry.part.CFrame=rig.root.CFrame*transform*entry.base
+  end
+ end
+end
+local function dialogueNode(page,node)
+ local first={
+  Shop={"Milo","TRAIL ARTISAN","Hey, climber! Looking for a little colour? Every trail here is yours to keep, and none changes your speed.","Browse trails","Earn coins?"},
+  Inventory={"Nova","STYLE CURATOR","Good to see you. Your collection is ready. Want to change the trail you leave behind?","My collection","About trails"},
+  Quests={"Fern","GARDEN KEEPER","Take a breath before the next climb. I keep track of your daily gift and weekly challenge.","My challenges","A challenge?"},
+  Leaderboard={"Ace","RACE STEWARD","The summit decides the finish order. Ready to see who has been climbing this week?","The board","Climbing tips"},
+ }
+ local details={
+  Shop="Clear a stage for coins and XP, then reach the summit for a finish bonus. Each stage pays once per round. Pick a favourite trail and save toward it.",
+  Inventory="Equip any trail you own whenever you like. They are visual effects only. For a calmer view, switch on Reduced Motion in Settings.",
+  Quests="Check in for a daily gift, then work toward the weekly finish challenge. Missing a day never takes away your coins. Your next climb is a fresh chance.",
+  Leaderboard="Watch the moving blocks before you jump. Save Updraft for a tall gap or a recovery. There is more than one route; a lower ledge can rescue a fall.",
+ }
+ local key=first[page] and page or "Shop" local data=first[key]
+ return {speaker=data[1],role=data[2],text=node=="advice" and details[key] or data[3],primary=data[4],secondary=node=="advice" and "Back" or data[5]}
+end
+local function renderDialogueNode(node)
+ local active=dialogue.active if not active then return end
+ active.node=node local content=dialogueNode(active.page,node)
+ ui.dialogueText.Text=content.text ui.dialogueText.MaxVisibleGraphemes=reducedMotion and -1 or 0
+ active.revealAt=os.clock() active.graphemes=utf8.len(content.text) or #content.text
+ ui.dialogueButtons[1].Text=content.primary ui.dialogueButtons[2].Text=content.secondary ui.dialogueButtons[3].Text="See you!"
+ if UserInputService:GetLastInputType().Name:find("Gamepad") then GuiService.SelectedObject=ui.dialogueButtons[1] end
+end
+closeDialogue=function(immediate)
+ local active=dialogue.active
+ if not active then return end
+ dialogue.active=nil dialogue.serial+=1 local serial=dialogue.serial
+ if GuiService.SelectedObject and GuiService.SelectedObject:IsDescendantOf(ui.dialogue) then GuiService.SelectedObject=nil end
+ local camera=workspace.CurrentCamera
+ if camera and camera==active.camera then
+  camera.CameraType=active.cameraType
+  if active.subject and active.subject.Parent then camera.CameraSubject=active.subject end
+  camera.CFrame=active.cameraFrame camera.Focus=active.cameraFocus
+ end
+ if active.prompt and active.prompt.Parent then active.prompt.Enabled=true end
+ if immediate or reducedMotion then ui.dialogue.Visible=false else
+  TweenService:Create(ui.dialogue,TweenInfo.new(.15,Enum.EasingStyle.Quad),{GroupTransparency=1}):Play()
+  task.delay(.16,function() if serial==dialogue.serial then ui.dialogue.Visible=false end end)
+ end
+ dialogue.portraitRig=nil
+end
+openDialogue=function(part)
+ if not dialogueAllowed(snapshot) or not part or not part.Parent then return end
+ local rootPart=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+ local humanoid=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+ if not rootPart or not humanoid or humanoid.Health<=0 or (rootPart.Position-part.Position).Magnitude>14 then return end
+ ResetHold.Cancel(resetHold)
+ closeDialogue(true) closeMenu() restoreCamera()
+ local camera=workspace.CurrentCamera if not camera then return end
+ local page=readStationValue(part,"MenuPage","Shop") local content=dialogueNode(page,"greeting")
+ dialogue.serial+=1
+ local active={part=part,page=page,node="greeting",started=os.clock(),camera=camera,cameraType=camera.CameraType,subject=camera.CameraSubject,cameraFrame=camera.CFrame,cameraFocus=camera.Focus,prompt=part:FindFirstChildWhichIsA("ProximityPrompt")}
+ dialogue.active=active
+ if active.prompt then active.prompt.Enabled=false end
+ ui.dialogueSpeaker.Text=readStationValue(part,"NPCName",content.speaker)
+ ui.dialogueRole.Text=readStationValue(part,"NPCRole",content.role)
+ ui.dialogue.Visible=true ui.dialogue.GroupTransparency=reducedMotion and 0 or 1
+ TweenService:Create(ui.dialogue,TweenInfo.new(reducedMotion and 0 or .22,Enum.EasingStyle.Quad),{GroupTransparency=0}):Play()
+ for _,item in ipairs(ui.dialoguePortrait:GetChildren()) do if item:IsA("WorldModel") or item:IsA("Camera") then item:Destroy() end end
+ local model=part.Parent
+ if model:IsA("Model") then
+  local clone=model:Clone()
+  for _,item in ipairs(clone:GetDescendants()) do
+   if item:IsA("ProximityPrompt") or item:IsA("LuaSourceContainer") or item:IsA("BillboardGui") or item:IsA("SurfaceGui") then item:Destroy() end
+  end
+  local world=make("WorldModel",ui.dialoguePortrait,{Name="Merchant"}) clone.Parent=world
+  local portraitRoot=clone:FindFirstChild("HumanoidRootPart")
+  if portraitRoot and portraitRoot:IsA("BasePart") then
+   -- Clone the authored pose, not the current world look-at pose, so talking
+   -- animation is not baked into and then applied again to the portrait.
+   local originalRig=dialogue.rigs[part]
+   for _,entry in ipairs(originalRig and originalRig.parts or {}) do
+    local clonedPart=clone:FindFirstChild(entry.part.Name,true)
+    if clonedPart and clonedPart:IsA("BasePart") then clonedPart.CFrame=portraitRoot.CFrame*entry.base end
+   end
+   local portraitCamera=make("Camera",ui.dialoguePortrait,{FieldOfView=32})
+   portraitCamera.CFrame=CFrame.lookAt(portraitRoot.CFrame:PointToWorldSpace(Vector3.new(0,1.6,10)),portraitRoot.Position+Vector3.new(0,1,0))
+   ui.dialoguePortrait.CurrentCamera=portraitCamera dialogue.portraitRig=captureNPCRig(clone,portraitRoot)
+  end
+ end
+ renderDialogueNode("greeting")
+end
+ui.dialogueText.Activated:Connect(function() if dialogue.active then ui.dialogueText.MaxVisibleGraphemes=-1 end end)
+ui.dialogueClose.Activated:Connect(function() closeDialogue() end)
+ui.dialogueButtons[1].Activated:Connect(function() local active=dialogue.active if active then local page=active.page closeDialogue(true) openMenu(page) end end)
+ui.dialogueButtons[2].Activated:Connect(function() local active=dialogue.active if active then renderDialogueNode(active.node=="advice" and "greeting" or "advice") end end)
+ui.dialogueButtons[3].Activated:Connect(function() closeDialogue() end)
 for index,page in ipairs({"Home","Shop","Inventory","Quests","Leaderboard","Settings"}) do
  local tab=button(navigation,page,UDim2.fromOffset(page=="Leaderboard" and 113 or 85,33),UDim2.fromOffset(0,0)) tab.Name=page tab.TextSize=14 tab.LayoutOrder=index
+ make("Frame",tab,{Name="ActivePage",Size=UDim2.new(1,-24,0,2),Position=UDim2.new(0,12,1,-3),BackgroundColor3=C.ink,BackgroundTransparency=.35,BorderSizePixel=0,Visible=false})
  tab.Activated:Connect(function() openMenu(page) end)
 end
 ui.launcher.Activated:Connect(function() if menuOpen then closeMenu() else openMenu("Home") end end)
@@ -728,7 +1033,7 @@ local function applyApprovedVelocity(kind,extra)
  return true
 end
 local function skillInputAllowed()
- return not cinematic and not spectateTarget and not menuOpen and not GuiService.MenuIsOpen and not UserInputService:GetFocusedTextBox() and snapshot.phase=="Racing" and snapshot.racing and not snapshot.finished
+ return not cinematic and not dialogue.active and not spectateTarget and not menuOpen and not GuiService.MenuIsOpen and not UserInputService:GetFocusedTextBox() and snapshot.phase=="Racing" and snapshot.racing and not snapshot.finished
 end
 local function abilityReadiness(ability,serverNow,lastApproved,cooldown)
  -- Rendering and input share one server-time deadline. A stale periodic
@@ -749,37 +1054,115 @@ local function tryUpdraft()
  shuttleCarry.reset()
  Action:FireServer("Updraft")
 end
-local function tryRestart()
-	if menuOpen or UserInputService:GetFocusedTextBox() or os.clock() - lastRestartAt < 0.8 then return end
-	if snapshot.phase ~= "Racing" or not snapshot.racing or snapshot.finished then return end
-	lastRestartAt = os.clock()
-	shuttleCarry.reset()
-	
-	Action:FireServer("Restart")
+local function resetEligible(confirmedCoreReset)
+ local character=player.Character
+ local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+ local rootPart=character and character:FindFirstChild("HumanoidRootPart")
+ return resetFocused and not cinematic and not dialogue.active and not menuOpen and not spectateTarget
+  and (confirmedCoreReset or not GuiService.MenuIsOpen) and not UserInputService:GetFocusedTextBox()
+  and snapshot.phase=="Racing" and snapshot.racing==true and not snapshot.finished and not snapshot.spectating and not snapshot.forfeited
+  and humanoid~=nil and humanoid.Health>0 and rootPart~=nil and not rootPart.Anchored
+end
+local function requestRestart(confirmedCoreReset)
+ if not resetEligible(confirmedCoreReset) or os.clock()-lastRestartAt<.8 then return false end
+ lastRestartAt=os.clock() shuttleCarry.reset()
+ Action:FireServer("Restart")
+ return true
+end
+local function resetKeyToken(input)
+ return input.UserInputType.Name..":"..input.KeyCode.Name
+end
+local function beginResetHold(token)
+ ResetHold.Begin(resetHold,token,os.clock(),resetEligible(false),player.Character)
+end
+local function cancelResetHold()
+ ResetHold.Cancel(resetHold) resetPointer=nil
+end
+local function resetPointerInside(input)
+ -- InputObject.Position and AbsolutePosition use the same inset-aware origin.
+ -- Subtracting the top bar again would falsely cancel normal touch holds.
+ local point=Vector2.new(input.Position.X,input.Position.Y)
+ local pos,size=restartButton.AbsolutePosition,restartButton.AbsoluteSize
+ return point.X>=pos.X and point.X<=pos.X+size.X and point.Y>=pos.Y and point.Y<=pos.Y+size.Y
 end
 
-
 ui.updraft.button.Activated:Connect(tryUpdraft)
-restartButton.Activated:Connect(tryRestart)
+-- Activated fires on release, so it must never be a reset shortcut. Pointer,
+-- keyboard and gamepad all feed the same cancellable, once-per-press hold.
+restartButton.InputBegan:Connect(function(input)
+ if input.UserInputType~=Enum.UserInputType.MouseButton1 and input.UserInputType~=Enum.UserInputType.Touch then return end
+ beginResetHold(input)
+ if resetHold.active==input then resetPointer=input end
+end)
+restartButton.MouseLeave:Connect(function()
+ if resetPointer and resetPointer.UserInputType==Enum.UserInputType.MouseButton1 then cancelResetHold() end
+end)
+restartButton.SelectionLost:Connect(function()
+ local input=resetHold.active and resetKeyInputs[resetHold.active]
+ if input and input.KeyCode==Enum.KeyCode.ButtonA then cancelResetHold() end
+end)
+table.insert(connections,UserInputService.InputBegan:Connect(function(input)
+ if input.KeyCode==Enum.KeyCode.ButtonA and GuiService.SelectedObject==restartButton then
+  local token=resetKeyToken(input) resetKeyInputs[token]=input beginResetHold(token)
+ end
+end))
+table.insert(connections,UserInputService.InputEnded:Connect(function(input)
+ ResetHold.Release(resetHold,input)
+ ResetHold.Release(resetHold,resetKeyToken(input))
+ if resetPointer==input then resetPointer=nil end
+end))
+table.insert(connections,UserInputService.InputChanged:Connect(function(input)
+ if input==resetPointer and input.UserInputType==Enum.UserInputType.Touch and not resetPointerInside(input) then cancelResetHold() end
+end))
+table.insert(connections,UserInputService.TextBoxFocused:Connect(cancelResetHold))
+table.insert(connections,GuiService.MenuOpened:Connect(cancelResetHold))
+table.insert(connections,UserInputService.WindowFocusReleased:Connect(function() resetFocused=false cancelResetHold() end))
+table.insert(connections,UserInputService.WindowFocused:Connect(function()
+ resetFocused=true
+ -- A key may have been released while the window was unfocused. Clear only
+ -- genuinely released keys; still-held inputs must not restart a cancelled hold.
+ for token,input in pairs(resetKeyInputs) do
+  local down=false
+  if input.UserInputType==Enum.UserInputType.Keyboard then down=UserInputService:IsKeyDown(input.KeyCode)
+  elseif input.UserInputType.Name:find("Gamepad") then down=UserInputService:IsGamepadButtonDown(input.UserInputType,input.KeyCode) end
+  if not down then ResetHold.Release(resetHold,token) end
+ end
+end))
+local coreReset=make("BindableEvent",gui,{Name="ConfirmedReset"})
+table.insert(connections,coreReset.Event:Connect(function()
+ -- Roblox emits this only after the built-in reset confirmation is accepted.
+ cancelResetHold() requestRestart(true)
+end))
+task.spawn(function()
+ for _=1,20 do
+  if not gui.Parent then return end
+  if pcall(function() StarterGui:SetCore("ResetButtonCallback",coreReset) end) then return end
+  task.wait(.25)
+ end
+end)
 accelerateButton.Activated:Connect(function() if snapshot.canAccelerate then Action:FireServer("Accelerate") accelerateButton.Visible=false end end)
 ContextActionService:BindAction("DasherUpdraft",function(_,state)
  if not skillInputAllowed() then return Enum.ContextActionResult.Pass end
  if state==Enum.UserInputState.Begin then tryUpdraft() end
  return Enum.ContextActionResult.Sink
 end,false,Enum.KeyCode.Q,Enum.KeyCode.ButtonX)
-ContextActionService:BindAction("DasherRestart",function(_,state)
- if UserInputService:GetFocusedTextBox() or GuiService.MenuIsOpen then return Enum.ContextActionResult.Pass end
- if menuOpen or snapshot.phase~="Racing" or not snapshot.racing or snapshot.finished or snapshot.spectating then return Enum.ContextActionResult.Pass end
- if state==Enum.UserInputState.Begin then tryRestart() end
- return menuOpen and Enum.ContextActionResult.Pass or Enum.ContextActionResult.Sink
+ContextActionService:BindAction("DasherRestart",function(_,state,input)
+ local token=resetKeyToken(input) resetKeyInputs[token]=input
+ if state==Enum.UserInputState.End then
+  ResetHold.Release(resetHold,token)
+ elseif state==Enum.UserInputState.Cancel then
+  if resetHold.active==token then cancelResetHold() end
+ elseif state==Enum.UserInputState.Begin then beginResetHold(token) end
+ return resetEligible(false) and Enum.ContextActionResult.Sink or Enum.ContextActionResult.Pass
 end,false,Enum.KeyCode.R,Enum.KeyCode.ButtonY)
 ContextActionService:BindAction("DasherMenu",function(_,state)
  if UserInputService:GetFocusedTextBox() or GuiService.MenuIsOpen then return Enum.ContextActionResult.Pass end
- if state==Enum.UserInputState.Begin then if menuOpen then closeMenu() else openMenu("Home") end end
+ if state==Enum.UserInputState.Begin then if dialogue.active then closeDialogue() elseif menuOpen then closeMenu() else openMenu("Home") end end
  return Enum.ContextActionResult.Sink
 end,false,Enum.KeyCode.Tab,Enum.KeyCode.H,Enum.KeyCode.ButtonSelect)
 ContextActionService:BindAction("DasherSpectate",function(_,state,input)
  if state~=Enum.UserInputState.Begin or UserInputService:GetFocusedTextBox() or GuiService.MenuIsOpen then return Enum.ContextActionResult.Pass end
+ if input.KeyCode==Enum.KeyCode.ButtonB and dialogue.active then closeDialogue() return Enum.ContextActionResult.Sink end
  if input.KeyCode==Enum.KeyCode.ButtonB and menuOpen then closeMenu() return Enum.ContextActionResult.Sink end
  if not spectateTarget then return Enum.ContextActionResult.Pass end
  if input.KeyCode==Enum.KeyCode.ButtonB then spectatorExitPending=true Action:FireServer("Spectate",false) restoreCamera()
@@ -787,6 +1170,8 @@ ContextActionService:BindAction("DasherSpectate",function(_,state,input)
  return Enum.ContextActionResult.Sink
 end,false,Enum.KeyCode.ButtonL1,Enum.KeyCode.ButtonR1,Enum.KeyCode.ButtonB)
 local function onCharacter(character)
+ cancelResetHold()
+ closeDialogue(true)
  shuttleCarry.reset()
  skillBlockedBefore=workspace:GetServerTimeNow()
  skillRequests.Updraft=-100 
@@ -798,11 +1183,11 @@ local function onCharacter(character)
   local humanoid=character:WaitForChild("Humanoid",10)
   if not humanoid or character~=player.Character then return end
   restoreCamera()
-  table.insert(characterConnections,humanoid.Died:Connect(function()  endEffect(character) restoreCamera() end))
+  table.insert(characterConnections,humanoid.Died:Connect(function() cancelResetHold() endEffect(character) restoreCamera() end))
  end)
 end
 table.insert(connections,player.CharacterAdded:Connect(onCharacter))
-table.insert(connections,player.CharacterRemoving:Connect(function(character)  endEffect(character) restoreCamera() end))
+table.insert(connections,player.CharacterRemoving:Connect(function(character) cancelResetHold() closeDialogue(true) endEffect(character) restoreCamera() end))
 if player.Character then onCharacter(player.Character) end
 table.insert(connections,Players.PlayerRemoving:Connect(function(person) if person==spectateTarget then setSpectate(1) end end))
 table.insert(connections,SkillFX.OnClientEvent:Connect(function(kind,data)
@@ -813,7 +1198,8 @@ table.insert(connections,Feedback.OnClientEvent:Connect(function(kind,message,ex
  elseif kind=="SkillDenied" then
   skillRequests.Updraft=-100
   if message and message~="" then showToast(message,C.muted,1.7) end
- elseif kind=="Reset" then
+ elseif kind=="Reset" or kind=="MovementCorrected" then
+  cancelResetHold()
   shuttleCarry.reset()
   skillBlockedBefore=workspace:GetServerTimeNow() skillRequests.Updraft=-100
   if player.Character then endEffect(player.Character) end
@@ -821,6 +1207,7 @@ table.insert(connections,Feedback.OnClientEvent:Connect(function(kind,message,ex
  elseif kind=="StageCompleted" then
   if type(extra)=="table" then showToast(string.format("STAGE %d   +%d COINS   +%d XP",extra.stage or 0,extra.coins or 0,extra.xp or 0),C.cyan,2.2) end
  elseif kind=="Finish" then
+  cancelResetHold()
   lastFinished=type(extra)=="table" and extra or nil
   if not muted then finishSound:Play() end
   showFinishCard(lastFinished)
@@ -876,10 +1263,14 @@ local function applyLobbyTheme()
  end
 end
 local function updateSnapshot(nextSnapshot)
- if type(nextSnapshot)~="table" then return end
+ if not RoundClock.Accept(snapshot,nextSnapshot) then return end
  local previousPhase,previousRound,previousSpectating,previousFinished=snapshot.phase,snapshot.roundId,snapshot.spectating,snapshot.finished
  local previousFinalSprint=snapshot.finalSprint
- snapshot=nextSnapshot receivedAt=os.clock()
+ snapshot=nextSnapshot
+ if previousPhase~=snapshot.phase or previousRound~=snapshot.roundId or not resetEligible(false) then cancelResetHold() end
+ if dialogue.active and not dialogueAllowed(snapshot) then closeDialogue(true) end
+ if previousPhase=="Countdown" and snapshot.phase=="Racing" then countdownPresentation.goUntil=(snapshot.phaseStartedAt or 0)+.75
+ elseif snapshot.phase~="Racing" then countdownPresentation.goUntil=0 end
  if previousRound~=snapshot.roundId then spectatorExitPending=false skillBlockedBefore=workspace:GetServerTimeNow() lastFinished=nil lastSkillApplied.Updraft=-math.huge restoreCamera() ui.result.Visible=false end
  if previousPhase~=snapshot.phase then
   restoreCamera()
@@ -959,7 +1350,7 @@ local function updateInputHints()
  local touch=input==Enum.UserInputType.Touch or (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled)
  ui.updraft.key.Text=gamepad and "X" or (touch and "^" or "Q")
  ui.launcher.Text=ui.compact and "MENU" or (gamepad and "MENU / VIEW" or (touch and "MENU" or "MENU / TAB"))
- restartButton.Text=gamepad and "RESET Y" or (touch and "RESET" or "RESET R")
+ ui.resetKey.Text=gamepad and "Y" or (touch and "↺" or "R")
  ui.onboardText.Text=gamepad and "X to lift / choose your landing" or (touch and "Tap Updraft / choose your landing" or "Q to lift / choose your landing")
 end
 table.insert(connections,UserInputService.LastInputTypeChanged:Connect(updateInputHints)) updateInputHints()
@@ -986,10 +1377,23 @@ local function layout()
  ui.updraft.title.Position=UDim2.fromOffset(compact and 44 or 50,compact and 4 or 8) ui.updraft.title.Size=UDim2.fromOffset(compact and 104 or 135,21)
  ui.updraft.cooldown.Position=UDim2.fromOffset(compact and 44 or 50,compact and 25 or 29) ui.updraft.cooldown.Size=UDim2.fromOffset(compact and 104 or 135,16)
  ui.run.Size=UDim2.fromOffset(compact and 120 or 200,compact and 16 or 18) ui.run.Position=UDim2.new(.5,compact and -60 or -100,1,-bottom-24)
- restartButton.Size=UDim2.fromOffset(compact and 64 or 80,compact and 24 or 28)
- restartButton.Position=UDim2.new(0,14,1,UserInputService.TouchEnabled and -125 or -42)
+ restartButton.Size=UDim2.fromOffset(compact and 130 or 140,UserInputService.TouchEnabled and 44 or 38)
+ local resetBottom=UserInputService.TouchEnabled and 219 or 52
+ restartButton.Position=UDim2.new(0,14,1,-resetBottom)
+ ui.resetHint.Position=UDim2.new(0,14,1,-resetBottom-21)
  local drawerWidth,drawerHeight=math.min(440,width-24),math.min(570,height-24)
  modal.Size=UDim2.fromOffset(drawerWidth,drawerHeight) ui.drawerPosition=UDim2.new(1,-drawerWidth-12,.5,-drawerHeight/2) modal.Position=ui.drawerPosition
+ local dialogueWidth=math.min(620,width-24) local showPortrait=dialogueWidth>=520
+ local dialogueHeight=showPortrait and 218 or (short and 224 or 258)
+ ui.dialogue.Size=UDim2.fromOffset(dialogueWidth,dialogueHeight) ui.dialogue.Position=UDim2.new(.5,-dialogueWidth/2,1,-dialogueHeight-18)
+ ui.dialoguePortrait.Visible=showPortrait ui.dialoguePortrait.Size=UDim2.fromOffset(112,142)
+ local dialogueLeft=showPortrait and 142 or 20
+ ui.dialogueSpeaker.Position=UDim2.fromOffset(dialogueLeft,14) ui.dialogueSpeaker.Size=UDim2.new(1,-dialogueLeft-50,0,28)
+ ui.dialogueRole.Position=UDim2.fromOffset(dialogueLeft,43) ui.dialogueRole.Size=UDim2.new(1,-dialogueLeft-28,0,18)
+ ui.dialogueText.Position=UDim2.fromOffset(dialogueLeft,70) ui.dialogueText.Size=UDim2.new(1,-dialogueLeft-22,0,dialogueHeight-145)
+ ui.dialogueText.TextSize=short and 14 or (showPortrait and 17 or 16)
+ ui.dialogueHint.Position=UDim2.new(0,dialogueLeft,1,-72) ui.dialogueHint.Size=UDim2.new(1,-dialogueLeft-22,0,17)
+ for _,choice in ipairs(ui.dialogueButtons) do choice.TextSize=dialogueWidth<420 and 11 or 13 end
  ui.modalTitle.TextSize=22 ui.modalSubtitle.TextSize=13
  local toastWidth=math.min(410,width-24) ui.toast.Size=UDim2.fromOffset(toastWidth,40) ui.toast.Position=UDim2.new(.5,-toastWidth/2,0,narrow and 126 or 114)
  local voteWidth=math.min(468,width-24) ui.vote.Size=UDim2.fromOffset(voteWidth,128) ui.vote.Position=UDim2.new(.5,-voteWidth/2,1,-145)
@@ -1008,22 +1412,64 @@ RunService:BindToRenderStep("DasherPresentation",Enum.RenderPriority.Camera.Valu
  local now=os.clock() local serverNow=workspace:GetServerTimeNow() local phase=snapshot.phase
  if spectatorExitPending and snapshot.spectating and now-spectatorExitRequestAt>.75 then spectatorExitRequestAt=now Action:FireServer("Spectate",false) end
  local multiplier=phase=="Racing" and (snapshot.multiplier or 1) or 1
- local timeLeft=math.max(0,(snapshot.timeLeft or 0)-(now-receivedAt)*multiplier)
+ local timeLeft=RoundClock.Remaining(snapshot,serverNow)
  ui.clock.Text=phase=="Waiting" and "--:--" or timeText(math.ceil(timeLeft),false)
  ui.clock.TextColor3=phase=="Racing" and timeLeft<=20 and C.gold or C.text
  local altitude=snapshot.altitude or {} local total=math.max(1,altitude.totalStages or 8)
  if phase=="Racing" then
   ui.phase.Text=snapshot.finished and "FINISHED!" or (snapshot.finalSprint and "FINAL SPRINT" or string.format("STAGE %d / %d%s",math.clamp((altitude.stage or 0)+1,1,total),total,multiplier>1 and " / 1.5x" or ""))
  end
- ui.countdown.Visible=phase=="Countdown" and not menuOpen and timeLeft<=3.5 ui.countdown.Text=timeLeft>.7 and tostring(math.ceil(timeLeft)) or "GO"
+ local countdownText=RoundClock.Countdown(snapshot,serverNow)
+ if phase=="Racing" and serverNow<countdownPresentation.goUntil then countdownText="GO" end
+ if phase=="Countdown" and timeLeft<=3.05 and cinematic then restoreCamera() end
+ ui.countdown.Visible=countdownText~="" and not menuOpen
+ if countdownText~=countdownPresentation.text then
+  countdownPresentation.text=countdownText ui.countdown.Text=countdownText
+  ui.countdown.TextColor3=countdownText=="GO" and C.cyan or C.text
+  ui.countdownScale.Scale=reducedMotion and 1 or 1.18
+  TweenService:Create(ui.countdownScale,TweenInfo.new(reducedMotion and 0 or .22,Enum.EasingStyle.Quad),{Scale=1}):Play()
+ end
  local enabled=phase=="Racing" and snapshot.racing and not snapshot.finished and not snapshot.spectating
  ui.abilities.Visible=enabled and not menuOpen and not cinematic ui.run.Visible=ui.abilities.Visible
  ui.rail.Visible=phase=="Racing" and not menuOpen and not cinematic and root.AbsoluteSize.Y>=390
- restartButton.Visible=enabled and not menuOpen
- ui.vote.Visible=phase=="Intermission" and #(snapshot.voteOptions or {})>0 and not menuOpen and not cinematic
+ restartButton.Visible=enabled and not menuOpen and not cinematic and not dialogue.active
+ local resetTriggered,resetProgress=ResetHold.Step(resetHold,now,resetEligible(false),player.Character)
+ if resetTriggered then requestRestart(false) end
+ ui.resetFill.Size=UDim2.fromScale(resetProgress,1)
+ ui.resetTitle.Text=resetHold.triggered and "RESETTING" or (resetHold.active and "HOLD..." or "HOLD TO RESET")
+ ui.resetTitle.TextColor3=resetHold.active and C.gold or C.muted
+ ui.resetKey.TextColor3=resetHold.active and C.gold or C.muted
+ ui.resetHint.Visible=restartButton.Visible and resetHold.active~=nil and not resetHold.triggered
+ ui.vote.Visible=phase=="Intermission" and #(snapshot.voteOptions or {})>0 and not menuOpen and not cinematic and not dialogue.active
  ui.spectator.Visible=spectateTarget~=nil and not menuOpen
  rankButton.Visible=phase=="Racing" and not menuOpen and not cinematic and root.AbsoluteSize.X>=600
- ui.onboarding.Visible=(phase=="Waiting" or phase=="Intermission") and not menuOpen and not cinematic
+ ui.onboarding.Visible=(phase=="Waiting" or phase=="Intermission") and not menuOpen and not cinematic and not dialogue.active
+ if dialogue.active then
+  local active=dialogue.active
+  local rootPart=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+  local humanoid=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+  if not dialogueAllowed(snapshot) or not active.part.Parent or not rootPart or not humanoid or humanoid.Health<=0 or (rootPart.Position-active.part.Position).Magnitude>15 then closeDialogue()
+  else
+   if ui.dialogueText.MaxVisibleGraphemes>=0 then
+    local count=math.floor((now-active.revealAt)*45)
+    ui.dialogueText.MaxVisibleGraphemes=count>=active.graphemes and -1 or count
+   end
+   ui.dialogueHint.Text=ui.dialogueText.MaxVisibleGraphemes<0 and "Choose a reply below" or "Tap the words to reveal"
+  end
+ end
+ if now-dialogue.lastPoseAt>=.05 then
+  dialogue.lastPoseAt=now
+  local rootPart=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+  for part,rig in pairs(dialogue.rigs) do
+   if not part.Parent then dialogue.rigs[part]=nil
+   elseif rootPart and (rootPart.Position-part.Position).Magnitude<45 then
+    local talking=dialogue.active and dialogue.active.part==part
+    local target=(talking or (rootPart.Position-part.Position).Magnitude<12) and (rootPart.Position+Vector3.new(0,1.5,0)) or nil
+    poseNPCRig(rig,now,target,talking)
+   end
+  end
+  if dialogue.portraitRig and dialogue.active then poseNPCRig(dialogue.portraitRig,now,nil,true) end
+ end
  local ability=snapshot.abilities or {}
  local cooldown=Config.UpdraftCooldown or 3.25
  local ready,charge,remaining=abilityReadiness(ability,serverNow,lastSkillApplied.Updraft,cooldown)
@@ -1067,7 +1513,13 @@ RunService:BindToRenderStep("DasherPresentation",Enum.RenderPriority.Camera.Valu
   cameraOffsetApplied=0 lastCamera=camera
  end
  if camera then
-  if cinematic then
+  if dialogue.active and not reducedMotion then
+   local active=dialogue.active local part=active.part
+   local focus=part.CFrame:PointToWorldSpace(Vector3.new(0,1.5,0))
+   local shot=CFrame.lookAt(part.CFrame:PointToWorldSpace(Vector3.new(2.1,2,8)),focus)
+   local alpha=math.clamp((now-active.started)/.6,0,1) alpha=alpha*alpha*(3-2*alpha)
+   camera.CameraType=Enum.CameraType.Scriptable camera.CFrame=active.cameraFrame:Lerp(shot,alpha) camera.Focus=CFrame.new(focus)
+  elseif cinematic then
    local frame=cinematic local alpha=math.clamp((now-frame.started)/frame.duration,0,1) local eased=alpha*alpha*(3-2*alpha)
    camera.CameraType=Enum.CameraType.Scriptable
    local shot=CFrame.lookAt(frame.from:Lerp(frame.to,eased),frame.lookAt)
@@ -1081,15 +1533,21 @@ RunService:BindToRenderStep("DasherPresentation",Enum.RenderPriority.Camera.Valu
     local handoff=math.clamp((alpha-.72)/.28,0,1) handoff=handoff*handoff*(3-2*handoff)
     shot=shot:Lerp(target,handoff) focus=focus:Lerp(targetFocus,handoff)
    end
-   camera.CFrame=shot camera.Focus=CFrame.new(focus)
-   if alpha>=1 then restoreCamera() end
+   local position=shot.Position
+   if frame.guard then position=mapIntroCamera.position(frame.guard,position,focus,frame.lastPosition) end
+   if frame.guard and not position then restoreCamera()
+   else
+    if frame.guard then frame.lastPosition=position shot=CFrame.lookAt(position,focus) end
+    camera.CFrame=shot camera.Focus=CFrame.new(focus)
+    if alpha>=1 then restoreCamera() end
+   end
   elseif spectateTarget and now-cameraCheckAt>.25 then
    cameraCheckAt=now local character=spectateTarget.Character local humanoid=character and character:FindFirstChildOfClass("Humanoid")
    local eligible=false for _,racer in ipairs(snapshot.racers or {}) do if racer.userId==spectateTarget.UserId and not racer.finished then eligible=true break end end
    if not humanoid or humanoid.Health<=0 or not eligible then setSpectate(1) else camera.CameraType=Enum.CameraType.Custom camera.CameraSubject=humanoid end
   end
   local baseFov=camera.FieldOfView-cameraOffsetApplied cameraKick*=math.exp(-dt*12)
-  cameraOffsetApplied=(reducedMotion or cinematic or spectateTarget) and 0 or cameraKick camera.FieldOfView=math.clamp(baseFov+cameraOffsetApplied,1,120)
+  cameraOffsetApplied=(reducedMotion or cinematic or dialogue.active or spectateTarget) and 0 or cameraKick camera.FieldOfView=math.clamp(baseFov+cameraOffsetApplied,1,120)
  end
 end)
 -- Authored NPCs expose contextual pages without a permanent row of shop GUIs.
@@ -1100,13 +1558,15 @@ local function bindStation(part)
  local page=(station and station:IsA("StringValue")) and station.Value or part.Name
  if not ({Shop=true,Inventory=true,Quests=true,Leaderboard=true})[page] then return end
  stationBindings[part]=true
+ if part.Parent:IsA("Model") then dialogue.rigs[part]=captureNPCRig(part.Parent,part) end
  local name=part:FindFirstChild("NPCName")
  local prompt=part:FindFirstChildWhichIsA("ProximityPrompt")
  if not prompt then
-  prompt=make("ProximityPrompt",part,{Name="DasherMenuPrompt",ActionText="Browse",ObjectText=name and name.Value or page,KeyboardKeyCode=Enum.KeyCode.E,GamepadKeyCode=Enum.KeyCode.ButtonX,HoldDuration=0,MaxActivationDistance=10,RequiresLineOfSight=false})
+  prompt=make("ProximityPrompt",part,{Name="DasherMenuPrompt",ActionText="Talk",ObjectText=name and name.Value or page,KeyboardKeyCode=Enum.KeyCode.E,GamepadKeyCode=Enum.KeyCode.ButtonX,HoldDuration=0,MaxActivationDistance=10,RequiresLineOfSight=false})
  end
+ prompt.ActionText="Talk"
  table.insert(connections,prompt.Triggered:Connect(function(person)
-  if not person or person==player then openMenu(page) end
+  if not person or person==player then openDialogue(part) end
  end))
 end
 task.spawn(function()
@@ -1128,6 +1588,10 @@ player:SetAttribute("DasherClientReady",true) Action:FireServer("Ready")
 task.delay(1.2,function() if gui.Parent and snapshot.phase=="Waiting" then Action:FireServer("Ready") end end)
 task.delay(3,function() if gui.Parent and not introPlayed then playLobbyIntro() end end)
 script.Destroying:Connect(function()
+ cancelResetHold()
+ pcall(function() StarterGui:SetCore("ResetButtonCallback",true) end)
+ closeDialogue(true)
+ for _,rig in pairs(dialogue.rigs) do for _,entry in ipairs(rig.parts) do if entry.part.Parent and rig.root.Parent then entry.part.CFrame=rig.root.CFrame*entry.base end end end
   restoreCamera()
  for character in pairs(effects) do endEffect(character) end
  for _,connection in ipairs(connections) do connection:Disconnect() end

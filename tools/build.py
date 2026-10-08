@@ -90,7 +90,10 @@ def build(output=None, qa=False):
     lighting.append(bloom)
     tree.append(lighting)
     replicated=item('ReplicatedStorage','ReplicatedStorage')
-    shared=item('Folder','Dasher');shared.append(script('ModuleScript','Config','src/shared/Config.luau'));replicated.append(shared);tree.append(replicated)
+    shared=item('Folder','Dasher')
+    for module in sorted((ROOT/'src/shared').glob('*.luau')):
+        shared.append(script('ModuleScript',module.stem,module.relative_to(ROOT)))
+    replicated.append(shared);tree.append(replicated)
     storage=item('ServerStorage','ServerStorage');storage.append(maps);tree.append(storage)
     scripts=item('ServerScriptService','ServerScriptService')
     # Server modules remain independent and are embedded automatically.

@@ -1,0 +1,34 @@
+{
+  "game": "DASHER",
+  "version": "branding-v1",
+  "createdDate": "2026-10-07",
+  "generationMode": "built-in image_gen",
+  "purpose": "Promotional illustration for the vertical tower obby with Updraft; not a gameplay screenshot.",
+  "assets": [
+    {
+      "file": "dasher-icon-v1.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG",
+      "prompt": "Use case: ads-marketing. Asset type: square Roblox experience icon, 1024x1024, 1:1 full bleed. Create ONE finished polished 3D game key art icon for the existing game DASHER, a competitive vertical tower obby whose only active ability is Updraft (a short vertical wind-powered leap). Scene: a classic block-built vertical obstacle tower against a rich sky blue atmosphere. One unmistakably blocky Roblox-style avatar, simple friendly yellow cylindrical head, dark short tousled hair, cyan and navy shirt, dark blocky trousers, is rocketing UPWARD between separated chunky blue and lilac rectangular platforms. Two arms, two legs, natural readable jump pose. A compact cyan-white spiral wind burst rises beneath the feet, showing the upward ability, with a few small luminous particles. Avatar is the dominant large focal point, head and torso very readable at small icon scale; broad joyful determined face. Supporting obstacles only, no clutter. Low-angle dynamic camera, clean silhouettes, saturated cyan/blue/lilac with warm face contrast, crisp bevels, attractive soft global illumination like excellent Roblox promotional renders, not a realistic human or voxel Minecraft character. Strong dimensional bold title across the lower quarter, EXACT TEXT: \"DASHER\" (D A S H E R), all capitals in broad white custom geometric sans letters with navy outline and restrained cyan extrusion. Keep all letters complete with 7% safe margin, easy to read at 150px. A single coherent image, no contact sheet or mockup, no borders. No other text, no UI, no Roblox wordmark, no weapons, no combat, no horizontal dash, no wings, no jetpack, no coins, no Robux or reward promises, no borrowed franchise characters. Promotional illustration representing the game's core mechanic, not a fabricated screenshot. Opaque background."
+    },
+    {
+      "file": "dasher-thumbnail-v1.png",
+      "width": 1672,
+      "height": 941,
+      "format": "PNG",
+      "prompt": "Use case: ads-marketing. Create ONE new wide landscape Roblox game thumbnail for DASHER. REQUIRED canvas 16:9 horizontal, ideally 1920x1080. The attached square icon is ONLY a visual style / character / typography reference, NOT a layout to crop or stretch. Recompose as an original cinematic landscape image. Match its polished blocky 3D rendering, cyan-white wind ability, navy/cyan hero clothing, friendly yellow face, dark hair, and bold white/navy/cyan DASHER lettering.\nScene: a very tall open-sided classic Roblox obstacle tower reaching through a bright blue sky. Separate chunky blue and lilac platforms, narrow balance beams and a rotating orange hazard bar on a distant level, genuine large jump gaps and alternate ascending routes. Show vertical height and depth, platforms receding upward toward a small broad summit platform. Main hero occupies the right half, using a short UPWARD wind leap from one platform toward a higher block; both feet clearly airborne above a concentrated bright cyan updraft spiral. The figure is large, joyful and determined, two arms and two legs, blocky toy avatar anatomy. Two much smaller competitors on separate background routes (one green-shirt avatar jumping and one orange-shirt avatar balancing), no contact or attacks. No artificial jets, wings, flying machine or weapons.\nComposition: professional game discovery thumbnail, high readability at mobile size, dramatic low oblique camera, hero face sharp, warm sun rim light, blue/lilac obstacle colors, atmospheric height, uncluttered negative space on the left for the title. EXACT and ONLY text \"DASHER\" on the left, bold broad geometric uppercase white lettering, dark navy outline, subtle cyan dimensional edge, echoing the icon. Title can occupy left 45% but do not cross the hero or become a full-image watermark. Keep complete title and all important faces within a 7% safe margin. Convey skillful vertical parkour racing; inviting and energetic, not combat or horror. Rich but restrained light effects. Promotional illustration, not a screenshot with invented UI. No tiny captions, no platform logo, no player-count claims, no cash or Robux promises, no badges, no borders, no collage, no split panels. Full opaque background.",
+      "reference": "dasher-icon-v1.png"
+    }
+  ],
+  "notesTR": [
+    "Kare dosya oyun ikonu; genis dosya thumbnail olarak hazirlandi.",
+    "Gorseller yapay zeka ile uretilmis tanitim cizimleridir; birebir oyun ici ekran goruntusu degildir.",
+    "Thumbnail uretilen dogal boyutunda korunmustur; 16:9 oranina cok yakindir. Yukleme onizlemesinde kirpmayi kontrol et.",
+    "Bu islem gorselleri olusturdu ve kaydetti; Roblox'a yukleme yapilmadi."
+  ],
+  "references": [
+    "https://create.roblox.com/docs/production/publishing/experience-icons",
+    "https://create.roblox.com/docs/production/publishing/thumbnails"
+  ]
+}

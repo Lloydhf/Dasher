@@ -1,13 +1,13 @@
-"""Execute actual v0.5 finish/reward/round functions with deterministic service mocks.
+"""Execute actual v0.7 finish/reward/round functions with deterministic service mocks.
 
 This verifies lifecycle and reward logic, not Roblox physics or a native10-player run.
 """
 from pathlib import Path
+from test_paths import ROOT, QA, LUAU, LUAU_COMPILE, TESTS
 import hashlib
 import json
 import re
 import subprocess
-from test_paths import ROOT, QA, LUAU
 
 SERVER = ROOT / 'src/server'
 source = (SERVER / 'DasherServer.server.luau').read_text(encoding='utf-8-sig')
@@ -29,6 +29,7 @@ local warn=function() end
 '''
 for module in ('ProfileStore', 'TowerRules', 'RoundRules'):
     code += '\nlocal ' + module + '=(function()\n' + (SERVER / (module+'.luau')).read_text(encoding='utf-8-sig') + '\nend)()\n'
+code += '\nlocal RoundClock=(function()\n' + (SERVER.parent / 'shared/RoundClock.luau').read_text(encoding='utf-8-sig') + '\nend)()\n'
 code += r'''
 local Config={CourseVersion=5,StageReward=3,StageXP=25,XPPerLevel=500,
  Cosmetics={{id='ice',name='ION',price=0},{id='solar',name='SOLAR',price=120}},
@@ -51,6 +52,7 @@ local spectating,votes,voteOptions={},{},{}
 local previousMap=nil
 local stopping=false
 local multiplier=1
+local phaseClock=RoundClock.New()
 local accelerated,accelerateAt,accelerationOwner=false,nil,nil
 local activeSince=0
 local random={NextInteger=function(_,a) return a end}
@@ -88,10 +90,8 @@ end
 '''
 code += between('local function addEntrant(', 'local function resetRun(')
 code += between('local function creditStages(', 'local supportOffsets =')
+code += between('local function beginPhaseClock(', 'local function waitPhase(')
 code += between('local function runRounds()', '-- The first lobby visit')
-contact = between('\t-- Only a real landing on an authored course surface', '\trecord.lastPosition = position\n\trecord.lastWorldPosition = position\n\trecord.lastSample = timestamp\nend\n\nlocal function applyLighting')
-code += '\nlocal courseStages={}\nlocal insideCrown=false\nlocal function intersectsBox() return insideCrown end\n'
-code += '\nlocal function validatedContact(player,record,grounded,groundPart)\n local routePrevious,position=nil,nil\n' + contact + '\nend\n'
 code += r'''
 local function resetScenario(count)
  people={}
@@ -101,6 +101,7 @@ local function resetScenario(count)
  stopping=false
  clock=100
  phase='Racing' roundId=1 timeLeft=420
+ RoundClock.Start(phaseClock,clock,timeLeft,1)
  finalSprint=false
  profiles:BeginStageRound(roundId)
  for i=1,count do
@@ -146,20 +147,7 @@ check(not record.finished and #finishers==0,'Forfeited racer cannot finish')
 record.forfeited=false phase='Results' finishRun(p)
 check(not record.finished,'Finish outside Racing is inert')
 phase='Racing' clock=record.runStartedAt+.1 finishRun(p)
-check(not record.finished and record.resetReason~=nil,'Implausibly fast crown contact fails timing guard')
-
-resetScenario(1) p=people[1] record=roster[p]
-local authoredBranch={} courseStages={[authoredBranch]=3}
-validatedContact(p,record,false,authoredBranch)
-check(record.gate==0,'Actual movement tail grants no reward for merely flying above a branch')
-validatedContact(p,record,true,{})
-check(record.gate==0,'Actual movement tail grants no progress for non-route scenery support')
-validatedContact(p,record,true,authoredBranch)
-check(record.gate==3 and profiles:GetStageProgress(p,1)==3,'Actual movement tail accepts alternate authored contact')
-record.gate=0 insideCrown=true
-validatedContact(p,record,false,nil)
-check(record.finished,'Actual validated crown contact reaches finish even without exact rest history')
-insideCrown=false
+check(not record.finished and record.resetReason==nil,'Implausibly fast crown contact grants nothing and leaves the run intact')
 
 resetScenario(10)
 local slots={}
@@ -245,7 +233,7 @@ check(not TowerRules.UpdraftReady(3.24,0,false,nil,3.25,.12),'Updraft cannot fir
 check(TowerRules.UpdraftReady(3.25,0,false,nil,3.25,.12),'Armed Updraft becomes ready exactly at3.25seconds')
 check(not TowerRules.UpdraftReady(5,0,true,nil,3.25,.12),'Repeated airborne Updraft remains prohibited')
 check(TowerRules.UpdraftReady(5,0,true,4.8,3.25,.12),'Verified landing rearms Updraft')
-print('[DASHER05_SERVER] PASS '..checks)
+print('[DASHER07_SERVER] PASS '..checks)
 '''
 target = QA / 'finish-regressions.luau'
 target.write_text(code, encoding='utf-8')
@@ -255,10 +243,11 @@ print(result.stdout, end='')
 print(result.stderr, end='')
 if result.returncode:
     raise SystemExit(result.returncode)
-count = int(re.search(r'\[DASHER05_SERVER\] PASS (\d+)', result.stdout).group(1))
+count = int(re.search(r'\[DASHER07_SERVER\] PASS (\d+)', result.stdout).group(1))
 hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in SERVER.glob('*.luau')}
+hashes['RoundClock.luau'] = hashlib.sha256((SERVER.parent / 'shared/RoundClock.luau').read_bytes()).hexdigest()
 (QA / 'finish-regression-results.json').write_text(json.dumps({
-    'version': '0.5.0', 'passed': count, 'failed': 0,
+    'version': '0.7.0', 'passed': count, 'failed': 0,
     'scope': 'Actual server finish/entrant/round-loop functions and profile/rule modules under deterministic service mocks; not native10-client performance.',
     'sourceSha256': hashes, 'harnessSha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
 }, indent=2), encoding='utf-8')

@@ -1,10 +1,4 @@
-# Ascent client v0.7
-
-## Conversations and shared clock
-
-NPC prompts now open a conversation. Milo, Nova, Fern and Ace each have a greeting and advice. The first choice opens the service, the second enters advice or returns, and the third leaves. Text can be revealed immediately. Portraits and nearby head/arm gestures use authored geometry; no uploaded animation asset is required. Reduced Motion stops ornamental movement.
-
-Conversations restore camera and prompt state on exit, distance, character change or race preparation. Every round snapshot has a monotonic stateSequence and absolute phaseStartedAt/phaseEndsAt. RoundClock rejects older snapshots and derives time from Workspace:GetServerTimeNow. The camera yields before the last three seconds. GO requires the Racing state; the client never unanchors a racer.
+# Ascent client v0.5
 
 One active skill: **Updraft**. The rounded **Nunito / Fredoka One** pairing from the original Tower release is restored. The permanent interface contains a compact clock, level/XP balance, height rail and one ability button. A small race-position button on wide screens opens the live ten-runner board; smaller screens reach the same board through Menu → Live Race. The height rail is hidden on short landscape screens, with height percentage shown alongside run time instead.
 
@@ -14,20 +8,12 @@ One active skill: **Updraft**. The rounded **Nunito / Fredoka One** pairing from
 | --- | --- | --- | --- |
 | Move / jump | WASD / Space | Stick / A | Roblox controls |
 | Updraft | Q | X | Updraft button |
-| Reset attempt | Hold R for 1.1 s | Hold Y for 1.1 s | Hold the reset button for 1.1 s |
+| Reset attempt | R | Y | Reset |
 | Drawer | Tab / H | View | Menu |
 | Spectator previous / next | On-screen arrows | LB / RB | Arrows |
 | Exit spectate / close drawer | On-screen X | B | X |
 
 Inactive ability input passes through so merchant NPC prompts remain available. Shift retains Roblox's normal camera behavior. Players cannot push, damage, or interfere with each other through a client ability.
-
-## Deliberate reset input
-
-The `HoldToReset` HUD button uses a small key badge, a gold progress track and a "Release to cancel" hint. Keyboard R, controller Y, mouse and touch all use `src/shared/ResetHold.luau`. A controller can also select the HUD button and hold A. A tap never dispatches `Action("Restart")`; a continuous 1.1-second hold dispatches it once. The completed hold remains latched until that physical input is released. Repeated key-down events and a second simultaneously held input cannot shorten or inherit the timer.
-
-Releasing early, dragging off the button, changing selection during a controller-A hold, opening a menu or dialogue, focusing chat, losing window focus, changing round or phase, dying, respawning, finishing or receiving a movement correction cancels the hold. Closing the interruption does not resume it. On focus return, released keys are reconciled without rearming a key that is still physically down. Touch positions are compared directly to the button's `AbsolutePosition`; both already use the same inset-aware coordinate origin.
-
-The ordinary Roblox menu retains its built-in reset confirmation. `StarterGui:SetCore("ResetButtonCallback", ...)` routes an accepted confirmation through the same server `Restart` request, with race eligibility checks and a duplicate-request debounce. That confirmed menu action does not require an additional hold. The custom HUD button has no `Activated` reset shortcut.
 
 ## Authoritative movement and rewards
 
@@ -35,11 +21,7 @@ The ordinary Roblox menu retains its built-in reset confirmation. `StarterGui:Se
 
 `SkillFX("Updraft", {userId, position, at})` presents the short wind ring, vertical streaks and procedural R6/R15 lift pose. These local effects do not collide, move platforms or carry avatars.
 
-`Feedback("MovementCorrected", message, {reasonCode, count})` follows the same client cleanup path as `Feedback("Reset", ...)`: it cancels a pending reset hold, clears moving-platform contact and the unanswered Updraft request, ends the local lift pose, and advances the boundary that rejects older approved impulses. The server's correction message is shown. Correction feedback does not itself reset stage progress, award currency or alter the round clock; those decisions remain on the server. In particular, a delayed Updraft approval issued before a correction cannot launch the avatar from the corrected landing.
-
-Automatic speed/flight corrections have been removed. The retained `MovementCorrected` feedback is now used only for recovery from non-finite physics values; ordinary finite movement never triggers that policing path.
-
-Moving shuttles are positioned by the server. The character's network-owning client applies the observed platform CFrame delta in `PreSimulation`, with no predicted terrain motion and no client-reported allowance. Transport requires contact with the same anchored Shuttle part before movement and a downward ray confirming the proposed contact after movement. The foot distance follows R6/R15 dimensions. Walking off, jumping, an Updraft request/approval, a reset, a round change or airborne vertical speed releases contact immediately. Deltas larger than 8 studs are rejected. The server separately verifies rider contact using bounded pose history; it must not also pivot the character.
+Moving shuttles are positioned by the server. The character's network-owning client applies the observed platform CFrame delta in `PreSimulation`, with no predicted terrain motion and no client-reported allowance. Transport requires contact with the same anchored Shuttle part before movement and a downward ray confirming the proposed contact after movement. The foot distance follows R6/R15 dimensions. Walking off, jumping, an Updraft request/approval, a reset, a round change or airborne vertical speed releases contact immediately. Deltas larger than 8 studs are rejected. The server separately verifies rider contact and accounts for bounded platform displacement; it must not also pivot the character.
 
 An unanswered Updraft request temporarily suspends transport; approval or denial immediately clears that request timer. Approval adds a separate 0.2-second guard for the impulse's first physics evaluation. This is shorter than the lift's flight time, so a later verified landing can acquire its moving platform without waiting for a fixed flight timeout.
 
@@ -75,8 +57,6 @@ Purchases use the existing server `Buy` / `Equip` actions. Stage coins can buy e
 ## Camera and drawer
 
 - Lobby reveal lasts about 6 seconds; map reveal lasts about 4 seconds within the longer countdown.
-- The map reveal faces the first four authored landings from inside the tower. Its route-relative starting radius is about 33 studs, instead of the former fixed exterior shot at radius 117. The planner tries three viewpoints and accepts only a clear path; unavailable or obstructed route geometry keeps the ordinary player camera.
-- A 0.85-stud camera lens guard checks visible geometry throughout the reveal and final handoff. Queryable parts use overlap and sphere casts. Decoration with `CanQuery=false` uses camera-only, conservative oriented-box checks, so camera protection does not alter gameplay raycasts. The lens stays inside the tower bounds and shortens its viewing arm before an obstruction. If no clear view remains, control returns to the ordinary camera.
 - The final portion blends into an ordinary third-person angle so gameplay starts facing the landings instead of the underside of the tower.
 - Reveals can be skipped and are bypassed by Reduced Motion. Phase changes and respawns restore camera ownership; a race never waits for a cinematic.
 - Ordinary menu/spectator exits preserve the player's camera orbit. Pending spectator exits recover through server acknowledgement, including rapid toggles.
@@ -85,7 +65,7 @@ Purchases use the existing server `Buy` / `Equip` actions. Stage coins can buy e
 - Personal finish feedback immediately opens a summit card with rank, real time and earned coins. A snapshot containing a newly finished player also opens it, so the presentation does not depend on a single transient notification. Results / Watch remain directly available.
 - The first finish announces Final Sprint to remaining runners. Server phase changes remain authoritative; the client never extends a race or delays its end.
 - Portrait touch layout places the Updraft control above Roblox's native movement controls.
-- Short landscape canvases below 390 pixels high and 800 pixels wide use a smaller clock, profile pill and single ability dock. The height rail is hidden. The reset button is 130 pixels wide in that layout, 140 otherwise; touch uses a 44-pixel height and raises it above the lower movement controls. Small-screen placement still needs device testing. "How to play" is available from Home.
+- Short landscape canvases below 390 pixels high and 800 pixels wide use a smaller clock, profile pill and single ability dock. At 568×320, persistent HUD rectangles total 26,144 square pixels (14.4%, including the transparent run-time label; the height rail is hidden). This is a source-layout calculation, not a native screenshot measurement. "How to play" is available from Home.
 
 ## Lobby NPC and theme contract
 
@@ -95,10 +75,6 @@ Lobby parts with a child `StringValue` named `LobbyTint` adopt `Config.Maps[mapI
 
 ## Validation boundary
 
-The 0.7 client compiles with `luau-compile`. The reset regression harness executes the shipped `ResetHold` module and extracted client event wiring, eligibility, progress presentation, snapshot cancellation, correction feedback and approved-impulse filtering (**78 checks**). It covers short taps, repeated key-down, one request per hold, keyboard/controller/mouse/touch paths, pointer drag, controller selection, focus recovery, menus/chat, round and character changes, and stale approvals after a correction. The report binds its results to the tested client and module hashes.
+The client compiles with `luau-compile --null`. An extracted-source Luau harness checks cooldown boundaries, stale ready flags, approved-impulse deadlines, grounded rearm, finish order, equal-height ties and ten-runner retention (**18 checks**). It does not simulate Roblox GUI rendering. Actual NPC interaction, moving-platform behavior, particle appearance, small-screen layout and multiplayer results must be recorded by the main Studio QA run. Disposable QA scripts must never be appended to a release file.
 
-The camera regression harness executes the shipped planner and lens guard (**54 checks**) with deterministic queryable and nonquery geometry, including rotated decoration, blocked targets, path clearance, radius clamping and missing map data. Actual three-tower geometry and native cinematic duration/visibility are checked separately by the release QA; the mocked harness alone is not visual proof.
-
-Separate movement, cooldown, ranking, dialogue and shared-clock checks remain relevant; see `docs/TESTING.md` for current-version results. Source-bound tests do not simulate Roblox GUI rendering or prove behavior with ten real clients. Actual NPC interaction, moving-platform behavior, particle appearance, small-screen layout and multiplayer results must be recorded by the main Studio QA run. Disposable QA scripts must never be appended to a release file.
-
-API references checked: [Font enums](https://create.roblox.com/docs/reference/engine/enums/Font), [ParticleEmitter](https://create.roblox.com/docs/reference/engine/classes/ParticleEmitter), [ApplyImpulse](https://create.roblox.com/docs/reference/engine/classes/BasePart#ApplyImpulse), [Camera](https://create.roblox.com/docs/reference/engine/classes/Camera), [StarterGui reset callback](https://create.roblox.com/docs/reference/engine/classes/StarterGui), [GUI coordinate origin](https://create.roblox.com/docs/reference/engine/classes/GuiBase2d), and [camera overlap/sphere casts](https://create.roblox.com/docs/reference/engine/classes/WorldRoot).
+API references checked: [Font enums](https://create.roblox.com/docs/reference/engine/enums/Font), [ParticleEmitter](https://create.roblox.com/docs/reference/engine/classes/ParticleEmitter), [ApplyImpulse](https://create.roblox.com/docs/reference/engine/classes/BasePart#ApplyImpulse), and [Camera](https://create.roblox.com/docs/reference/engine/classes/Camera).

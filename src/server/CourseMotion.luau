@@ -2,7 +2,7 @@
 local Rules = require(script.Parent:WaitForChild("TowerRules"))
 local CourseMotion = {}
 CourseMotion.__index = CourseMotion
-local CONTACT_HISTORY_SECONDS = 0.2
+local CONTACT_HISTORY_SECONDS = 0.5
 
 local function numberValue(model, name, fallback, minimum, maximum)
 	local value = model:FindFirstChild(name)

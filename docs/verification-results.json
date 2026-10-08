@@ -1,45 +1,59 @@
 {
-  "version": "0.5.0",
-  "productionPlaceSha256": "b643dd193ee79a5a63986d73621df74943d1ec15141999c009db143c963c0a2f",
+  "version": "0.7.0",
+  "packagedAtUtc": "2026-10-08T09:28:33.515281+00:00",
+  "productionPlaceSha256": "98999c7b3eced7e651d430da3802652c5d40162b280895955003c0ef0b4e5a1b",
   "sourceSha256": {
-    "src/client/DasherClient.client.luau": "2237b2a847f92fc845590aa0ff4a4bcbcabf6e5e3aa316baad85937e950a7684",
-    "src/server/CourseMotion.luau": "991358b79345a928dfc10f77f56259aff3b5689a03945746550abb1ac41f8c76",
-    "src/server/DasherServer.server.luau": "894bc5da87d504581f7f68ec61aa69e9c7803b5997b9ee520fee8b5c7b44fe8b",
+    "src/client/DasherClient.client.luau": "dfa4c46d4bebbb6a7c3fdd33171899a0df964089e8c79a77a92eeadbc5143855",
+    "src/server/CourseMotion.luau": "e30bc5e8b1615399ca009d33995c25a3bdaf68c63ed18f69ce055dfe344b2ff3",
+    "src/server/DasherServer.server.luau": "d89624219fa75f171c823f6057c7ffbf570377b4a887adcaa702ddd543734f6e",
     "src/server/ProfileStore.luau": "ebe195607a9a6ee701344f353008ceddbbab9b833a6470f2e6ee84286648dfb4",
     "src/server/RoundRules.luau": "803f32660bc15e1f245a10141128a1da2834acc5ec900d6c6d444f1c655f3130",
-    "src/server/TowerRules.luau": "744f514e9d3668686296c0dd6e5d8a267b9f96a0cdab8a0ba700d679fed81af8",
+    "src/server/TowerRules.luau": "961f54d591457b9d151382f0c0744c5cfd1ae5a212a4cd498b85c78b0e0d0733",
     "src/server/WeeklyLeaderboard.luau": "98f9fa92aa6ac011e41701150ff05e596eb93ec465f58c60ad3cfdd58a67bc86",
-    "src/shared/Config.luau": "f00f7b2e4d72ab2cfcf4e33560d7a5b7fc56a416722fcd48d3469ec712afa0cf"
+    "src/shared/Config.luau": "4c293102a0be5e601ae222395670cb98de2c75b12899d7326062a5f03a7febae",
+    "src/shared/ResetHold.luau": "ef2cb95662dd9273552644cba3490ed49a1b87bb962d7eee9567e3995fa27900",
+    "src/shared/RoundClock.luau": "a27ea90c4fb03282b621b3c289e1d1f0a9cc2936b85056b33abe02c3034319e3"
   },
   "native": {
-    "version": "0.5.0",
-    "identity": "native05-1790245491",
-    "artifact": "native05-1790245491.rbxlx",
-    "artifactSha256": "d6092000df259c9b299db6fb8b55f25b958e75c4beac61eaed47f2837902fe94",
-    "productionPlaceSha256": "b643dd193ee79a5a63986d73621df74943d1ec15141999c009db143c963c0a2f",
-    "sourceFingerprint": "fad7b009909a6229d6369cc8597eb786806cfdbefe7d7e222ac1e1dc81ed5b7e",
+    "version": "0.7.0",
+    "identity": "native07-1791378412",
+    "artifact": "ASCENT07_LOCAL_TEST_ONLY.rbxlx",
+    "declaredArtifact": "native07-1791378412.rbxlx",
+    "verifiedArtifactFile": "ASCENT07_LOCAL_TEST_ONLY.rbxlx",
+    "artifactSha256": "cfb29d8b0238736a27a2b643b548283c8060d179d936cdfd4d1c44bab21381a6",
+    "productionPlaceSha256": "98999c7b3eced7e651d430da3802652c5d40162b280895955003c0ef0b4e5a1b",
+    "sourceFingerprint": "b2c6915e055b737d62dae15bac7acb22842a299509e1bd3f0f732b53871da958",
+    "productionScriptsMatchSource": true,
+    "qaWrapsProductionScripts": true,
     "nonScriptGeometryIdentical": true,
     "runtimeScriptErrors": 0,
     "errorLogScope": [
-      "0.740.0.7400927_20260924T102535Z_Studio_38887_last.log"
+      "0.741.19.7411056_20261007T120423Z_Studio_20E09_last.log"
     ],
+    "selectedSession": {
+      "log": "0.741.19.7411056_20261007T120423Z_Studio_20E09_last.log",
+      "startLine": 11971,
+      "endLine": 13380,
+      "readySeen": true,
+      "probeSeen": true
+    },
     "maps": {
       "Helix": {
-        "time": 109.87850689888,
+        "time": 125.16213393211365,
         "xp": 150,
         "coins": 20,
         "personalBest": true,
         "rank": 1
       },
       "Reactor": {
-        "time": 109.87902021408081,
+        "time": 112.56531810760498,
         "xp": 150,
         "coins": 20,
         "personalBest": true,
         "rank": 1
       },
       "Canopy": {
-        "time": 107.84600019454956,
+        "time": 112.14729309082031,
         "xp": 150,
         "coins": 20,
         "personalBest": true,
@@ -114,7 +128,9 @@
           63,
           64
         ],
-        "finishDuring": "Crown approach"
+        "crownArrival": true,
+        "finishDuring": "Walk onto marked FinishPad",
+        "earlyFinishNegativeCheck": true
       },
       "Canopy": {
         "landedPlatforms": [
@@ -180,12 +196,12 @@
           60,
           61,
           62,
-          63
+          63,
+          64
         ],
-        "finishDuring": "P063 approach toward P064",
-        "sensorPadding": 2.2,
-        "geometryIntersectionVerified": true,
-        "limitation": "P064 landing was not observed: authoritative summit sensor contact ended the race first."
+        "crownArrival": true,
+        "finishDuring": "Walk onto marked FinishPad",
+        "earlyFinishNegativeCheck": true
       },
       "Reactor": {
         "landedPlatforms": [
@@ -254,65 +270,302 @@
           63,
           64
         ],
-        "finishDuring": "Crown approach"
+        "crownArrival": true,
+        "finishDuring": "Walk onto marked FinishPad",
+        "earlyFinishNegativeCheck": true
       }
     },
     "resets": 0,
-    "lifts": 24,
+    "lifts": 25,
     "branchPassed": true,
     "resultsSeen": true,
     "nextRoundSeen": true,
-    "scope": "Normal Humanoid walk/jump and approved Updraft; no QA teleport or movement bypass. Only countdown shortened to5 seconds; intermission18/results10/race420 match production. Optional post-complete NPC approach is separate from route evidence.",
+    "scope": "Normal Humanoid walk/jump and approved Updraft; no QA teleport or movement bypass. Countdown 8 seconds (production); intermission18/results10/race420 match production. Optional post-complete NPC approach is separate from route evidence.",
     "passed": true
   },
+  "nativeUI": {
+    "passed": true,
+    "artifact": "native07-1791378412",
+    "sourceFingerprint": "b2c6915e055b737d62dae15bac7acb22842a299509e1bd3f0f732b53871da958",
+    "productionPlaceSha256": "98999c7b3eced7e651d430da3802652c5d40162b280895955003c0ef0b4e5a1b",
+    "sourceSha256": {
+      "src/client/DasherClient.client.luau": "dfa4c46d4bebbb6a7c3fdd33171899a0df964089e8c79a77a92eeadbc5143855",
+      "src/server/CourseMotion.luau": "e30bc5e8b1615399ca009d33995c25a3bdaf68c63ed18f69ce055dfe344b2ff3",
+      "src/server/DasherServer.server.luau": "d89624219fa75f171c823f6057c7ffbf570377b4a887adcaa702ddd543734f6e",
+      "src/server/ProfileStore.luau": "ebe195607a9a6ee701344f353008ceddbbab9b833a6470f2e6ee84286648dfb4",
+      "src/server/RoundRules.luau": "803f32660bc15e1f245a10141128a1da2834acc5ec900d6c6d444f1c655f3130",
+      "src/server/TowerRules.luau": "961f54d591457b9d151382f0c0744c5cfd1ae5a212a4cd498b85c78b0e0d0733",
+      "src/server/WeeklyLeaderboard.luau": "98f9fa92aa6ac011e41701150ff05e596eb93ec465f58c60ad3cfdd58a67bc86",
+      "src/shared/Config.luau": "4c293102a0be5e601ae222395670cb98de2c75b12899d7326062a5f03a7febae",
+      "src/shared/ResetHold.luau": "ef2cb95662dd9273552644cba3490ed49a1b87bb962d7eee9567e3995fa27900",
+      "src/shared/RoundClock.luau": "a27ea90c4fb03282b621b3c289e1d1f0a9cc2936b85056b33abe02c3034319e3"
+    },
+    "nativeCountdownRounds": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "cameraRestoredBefore3": true,
+    "onlyGoUnanchored": true,
+    "hold": {
+      "resetFocused": true,
+      "typing": false,
+      "oncePerPress": true,
+      "anchored": false,
+      "eligible": true,
+      "phase": "Racing",
+      "sourceFingerprint": "b2c6915e055b737d62dae15bac7acb22842a299509e1bd3f0f732b53871da958",
+      "manualResets": 1,
+      "shortPress": true,
+      "resetDifference": 1,
+      "racing": true,
+      "runId": "hold-ui07-1791451292",
+      "finished": false,
+      "dialogue": false,
+      "menuProgress": 0.3494977355003357,
+      "cinematic": false,
+      "renderedProgress": true,
+      "shortProgress": 0.3179127275943756,
+      "coreMenu": false,
+      "event": "complete",
+      "menuOpen": false,
+      "fullProgress": 0.5009987354278564,
+      "menuCancel": true,
+      "health": 100,
+      "elapsed": 9.71474040000021,
+      "attempt": 1,
+      "focusLossesDuringAttempt": 0,
+      "serverTime": 1791451432.204416,
+      "roundId": 1
+    },
+    "introCamera": {
+      "Helix": {
+        "samples": 25,
+        "maxRadius": 32.802433013916016,
+        "insideTower": true,
+        "lensClear": true,
+        "sightClear": true,
+        "observedSpanSeconds": 3.8572163000026194
+      },
+      "Canopy": {
+        "samples": 49,
+        "maxRadius": 32.80242156982422,
+        "insideTower": true,
+        "lensClear": true,
+        "sightClear": true,
+        "observedSpanSeconds": 3.970596099999966
+      },
+      "Reactor": {
+        "samples": 23,
+        "maxRadius": 32.80241394042969,
+        "insideTower": true,
+        "lensClear": true,
+        "sightClear": true,
+        "observedSpanSeconds": 3.8304994000027364
+      }
+    },
+    "holdArtifact": "hold-ui07-1791451292",
+    "holdEvidence": {
+      "passed": true,
+      "identity": "hold-ui07-1791451292",
+      "artifact": "hold-ui07-1791451292.rbxlx",
+      "artifactSha256": "2a0bf82983f34eec1a78c57f88d7200c1b475d323bfadc2197342be3b8e7d22d",
+      "productionPlaceSha256": "98999c7b3eced7e651d430da3802652c5d40162b280895955003c0ef0b4e5a1b",
+      "sourceSha256": {
+        "src/client/DasherClient.client.luau": "dfa4c46d4bebbb6a7c3fdd33171899a0df964089e8c79a77a92eeadbc5143855",
+        "src/server/CourseMotion.luau": "e30bc5e8b1615399ca009d33995c25a3bdaf68c63ed18f69ce055dfe344b2ff3",
+        "src/server/DasherServer.server.luau": "d89624219fa75f171c823f6057c7ffbf570377b4a887adcaa702ddd543734f6e",
+        "src/server/ProfileStore.luau": "ebe195607a9a6ee701344f353008ceddbbab9b833a6470f2e6ee84286648dfb4",
+        "src/server/RoundRules.luau": "803f32660bc15e1f245a10141128a1da2834acc5ec900d6c6d444f1c655f3130",
+        "src/server/TowerRules.luau": "961f54d591457b9d151382f0c0744c5cfd1ae5a212a4cd498b85c78b0e0d0733",
+        "src/server/WeeklyLeaderboard.luau": "98f9fa92aa6ac011e41701150ff05e596eb93ec465f58c60ad3cfdd58a67bc86",
+        "src/shared/Config.luau": "4c293102a0be5e601ae222395670cb98de2c75b12899d7326062a5f03a7febae",
+        "src/shared/ResetHold.luau": "ef2cb95662dd9273552644cba3490ed49a1b87bb962d7eee9567e3995fa27900",
+        "src/shared/RoundClock.luau": "a27ea90c4fb03282b621b3c289e1d1f0a9cc2936b85056b33abe02c3034319e3"
+      },
+      "sourceFingerprint": "b2c6915e055b737d62dae15bac7acb22842a299509e1bd3f0f732b53871da958",
+      "qaWrapsProductionScripts": true,
+      "nonScriptGeometryIdentical": true,
+      "selectedSession": {
+        "log": "0.742.0.7421053_20261008T091942Z_Studio_B2895_last.log",
+        "startLine": 2052,
+        "endLine": 2401
+      },
+      "runtimeScriptErrors": 0,
+      "hold": {
+        "resetFocused": true,
+        "typing": false,
+        "oncePerPress": true,
+        "anchored": false,
+        "eligible": true,
+        "phase": "Racing",
+        "sourceFingerprint": "b2c6915e055b737d62dae15bac7acb22842a299509e1bd3f0f732b53871da958",
+        "manualResets": 1,
+        "shortPress": true,
+        "resetDifference": 1,
+        "racing": true,
+        "runId": "hold-ui07-1791451292",
+        "finished": false,
+        "dialogue": false,
+        "menuProgress": 0.3494977355003357,
+        "cinematic": false,
+        "renderedProgress": true,
+        "shortProgress": 0.3179127275943756,
+        "coreMenu": false,
+        "event": "complete",
+        "menuOpen": false,
+        "fullProgress": 0.5009987354278564,
+        "menuCancel": true,
+        "health": 100,
+        "elapsed": 9.71474040000021,
+        "attempt": 1,
+        "focusLossesDuringAttempt": 0,
+        "serverTime": 1791451432.204416,
+        "roundId": 1
+      },
+      "testTimings": {
+        "intermission": 2,
+        "countdown": 1,
+        "round": 12,
+        "results": 2
+      },
+      "scope": "Separate UI-only native session using actual production hold helpers and rendered HUD during Racing. Temporary-profile test mode uses existing accelerated 2/1/12/2 Studio phase defaults; this session is not production countdown/camera evidence. Actual input wiring remains source-bound, not a physical keyboard/controller/touch test."
+    },
+    "holdEvidenceArtifactSha256": "2a0bf82983f34eec1a78c57f88d7200c1b475d323bfadc2197342be3b8e7d22d",
+    "holdEvidenceReportSha256": "5f2be63920c24067a8d44f34f3ad1a82a00699afc748e61942295955606984a3",
+    "scope": "Camera/countdown use the verified three-tower traversal with production phase timings. Hold progress, early release, menu cancellation and one reset per hold use a separate exact-source/geometry UI artifact with accelerated Studio phase defaults; the traversal-end focus-interrupted hold attempt is diagnostic only. No production focus/eligibility override or real mobile/controller hardware test."
+  },
+  "movement": {
+    "passed": 41,
+    "failed": 0,
+    "scope": "Actual complete validator, support, teleport and correction under deterministic replicated-pose/raycast mocks; not live multiplayer latency testing.",
+    "sourceHashes": {
+      "src/server/DasherServer.server.luau": "d89624219fa75f171c823f6057c7ffbf570377b4a887adcaa702ddd543734f6e",
+      "src/server/TowerRules.luau": "961f54d591457b9d151382f0c0744c5cfd1ae5a212a4cd498b85c78b0e0d0733"
+    },
+    "harnessSha256": "98d9f846144077cf3022ce38d51f4bd98930a978732199712fc3336301846848"
+  },
+  "holdReset": {
+    "passed": true,
+    "checks": 78,
+    "kind": "actual shipped hold state machine and extracted client event wiring",
+    "files": {
+      "src\\client\\DasherClient.client.luau": "dfa4c46d4bebbb6a7c3fdd33171899a0df964089e8c79a77a92eeadbc5143855",
+      "src\\shared\\ResetHold.luau": "ef2cb95662dd9273552644cba3490ed49a1b87bb962d7eee9567e3995fa27900"
+    },
+    "scope": [
+      "R/Y/button-A/mouse/touch",
+      "short tap and repeated keydown",
+      "one request per hold",
+      "release and focus recovery",
+      "chat/menu/dialogue/phase/character cancellation",
+      "pointer drag and controller selection",
+      "native reset confirmation",
+      "progress HUD state"
+    ]
+  },
   "finish": {
-    "version": "0.5.0",
-    "passed": 95,
+    "version": "0.7.0",
+    "passed": 91,
     "failed": 0,
     "scope": "Actual server finish/entrant/round-loop functions and profile/rule modules under deterministic service mocks; not native10-client performance.",
     "sourceSha256": {
-      "CourseMotion.luau": "991358b79345a928dfc10f77f56259aff3b5689a03945746550abb1ac41f8c76",
-      "DasherServer.server.luau": "894bc5da87d504581f7f68ec61aa69e9c7803b5997b9ee520fee8b5c7b44fe8b",
+      "CourseMotion.luau": "e30bc5e8b1615399ca009d33995c25a3bdaf68c63ed18f69ce055dfe344b2ff3",
+      "DasherServer.server.luau": "d89624219fa75f171c823f6057c7ffbf570377b4a887adcaa702ddd543734f6e",
       "ProfileStore.luau": "ebe195607a9a6ee701344f353008ceddbbab9b833a6470f2e6ee84286648dfb4",
       "RoundRules.luau": "803f32660bc15e1f245a10141128a1da2834acc5ec900d6c6d444f1c655f3130",
-      "TowerRules.luau": "744f514e9d3668686296c0dd6e5d8a267b9f96a0cdab8a0ba700d679fed81af8",
-      "WeeklyLeaderboard.luau": "98f9fa92aa6ac011e41701150ff05e596eb93ec465f58c60ad3cfdd58a67bc86"
+      "TowerRules.luau": "961f54d591457b9d151382f0c0744c5cfd1ae5a212a4cd498b85c78b0e0d0733",
+      "WeeklyLeaderboard.luau": "98f9fa92aa6ac011e41701150ff05e596eb93ec465f58c60ad3cfdd58a67bc86",
+      "RoundClock.luau": "a27ea90c4fb03282b621b3c289e1d1f0a9cc2936b85056b33abe02c3034319e3"
     },
-    "harnessSha256": "ab4dfaca8119c48d5bc63b68459c877eae463c4f5cc52bcff29b37e5b84ac43e"
-  },
-  "movement": {
-    "passed": 23,
-    "scope": "Actual teleport initialization, validateRacer validation prefix, groundSupport, refreshGround and TowerRules; controlled vector/raycast/clock inputs.",
-    "sourceHashes": {
-      "src/server/DasherServer.server.luau": "894bc5da87d504581f7f68ec61aa69e9c7803b5997b9ee520fee8b5c7b44fe8b",
-      "src/server/TowerRules.luau": "744f514e9d3668686296c0dd6e5d8a267b9f96a0cdab8a0ba700d679fed81af8"
-    },
-    "harnessSha256": "7e55224f1f0987a7fc9635a254bdad1c0f7978f1c8e30e6023cb47637932ad4c"
-  },
-  "client": {
-    "checks": 18,
-    "passed": true,
-    "clientSha256": "2237b2a847f92fc845590aa0ff4a4bcbcabf6e5e3aa316baad85937e950a7684",
-    "harnessSha256": "b0327ee41e7183cc25cfc8208d17bf701bb1995488ce463a3a5a518f4a51fea6",
-    "sourceFunctionsVerified": true,
-    "details": "PASS 18 client readiness and ranking checks",
-    "nativeUiTested": false
+    "harnessSha256": "aa425e07933b7cfef1b16689087eee5bafc506f153816da35eaf9e4fece40f40"
   },
   "movingSupport": {
     "passed": 30,
     "failed": 0,
     "scope": "Actual CourseMotion history and server groundSupport with deterministic rigid-transform/raycast mocks; native replication still requires Studio validation.",
     "sourceHashes": {
-      "src/server/DasherServer.server.luau": "894bc5da87d504581f7f68ec61aa69e9c7803b5997b9ee520fee8b5c7b44fe8b",
-      "src/server/CourseMotion.luau": "991358b79345a928dfc10f77f56259aff3b5689a03945746550abb1ac41f8c76",
-      "src/server/TowerRules.luau": "744f514e9d3668686296c0dd6e5d8a267b9f96a0cdab8a0ba700d679fed81af8"
+      "src/server/DasherServer.server.luau": "d89624219fa75f171c823f6057c7ffbf570377b4a887adcaa702ddd543734f6e",
+      "src/server/CourseMotion.luau": "e30bc5e8b1615399ca009d33995c25a3bdaf68c63ed18f69ce055dfe344b2ff3",
+      "src/server/TowerRules.luau": "961f54d591457b9d151382f0c0744c5cfd1ae5a212a4cd498b85c78b0e0d0733"
     },
-    "harnessSha256": "ea9e45f2f09be448f6453bd6c5f3572306c129d6d7275cc56298872f44d814fa"
+    "harnessSha256": "62b81b0f6fb63ee4fee1831a5ea40f5b273cb34ca4bbfe273fb662f6d2a24726"
+  },
+  "shuttleLatency": {
+    "passed": 7,
+    "failed": 0,
+    "cases": [
+      {
+        "poseDelaySeconds": 0.1,
+        "longestMissingSupportSeconds": 0.0
+      },
+      {
+        "poseDelaySeconds": 0.2,
+        "longestMissingSupportSeconds": 0.0
+      },
+      {
+        "poseDelaySeconds": 0.3,
+        "longestMissingSupportSeconds": 0.0
+      },
+      {
+        "poseDelaySeconds": 0.35,
+        "longestMissingSupportSeconds": 0.0
+      },
+      {
+        "poseDelaySeconds": 0.4,
+        "longestMissingSupportSeconds": 0.0
+      },
+      {
+        "poseDelaySeconds": 0.45,
+        "longestMissingSupportSeconds": 0.0
+      },
+      {
+        "poseDelaySeconds": 0.5,
+        "longestMissingSupportSeconds": 0.0
+      }
+    ],
+    "scope": "Exact production CourseMotion/groundSupport replay with authored P042 shuttle and corner offset; delayed poses simulated, not native network proof.",
+    "limits": "Zero missing support asserted for the sampled0.1\u20130.5second delays on this corner/trajectory; no promise for arbitrary latency or avatars. Separate history suite rejects expired/foreign/airborne contacts.",
+    "sourceHashes": {
+      "src/server/DasherServer.server.luau": "d89624219fa75f171c823f6057c7ffbf570377b4a887adcaa702ddd543734f6e",
+      "src/server/CourseMotion.luau": "e30bc5e8b1615399ca009d33995c25a3bdaf68c63ed18f69ce055dfe344b2ff3",
+      "src/server/TowerRules.luau": "961f54d591457b9d151382f0c0744c5cfd1ae5a212a4cd498b85c78b0e0d0733"
+    },
+    "harnessSha256": "3207bd54aae5e4d12dc7b3dfd2632e4e7809d921234e46356d2232a7dd08fb6b"
+  },
+  "clock": {
+    "version": "0.6.0",
+    "passed": 86,
+    "failed": 0,
+    "sharedChecks": 71,
+    "serverPhaseChecks": 15,
+    "scope": "Shipped RoundClock module, plus extracted production beginPhaseClock/waitPhase functions under deterministic heartbeat mocks. Real packet latency and engine timing still require Studio.",
+    "sourceSha256": {
+      "DasherServer.server.luau": "d89624219fa75f171c823f6057c7ffbf570377b4a887adcaa702ddd543734f6e",
+      "RoundClock.luau": "a27ea90c4fb03282b621b3c289e1d1f0a9cc2936b85056b33abe02c3034319e3"
+    },
+    "harnessSha256": "d6cb2c65aeca3086792f1dcc6985bfeb09c3bc139488fe1c72b0705f4271e42d"
+  },
+  "profileRules": {
+    "version": "0.6.0",
+    "passed": 52,
+    "failed": 0,
+    "exit_code": 0,
+    "scope": "Actual ProfileStore and TowerRules modules under deterministic datastore, time and terrain mocks; no live persistence or multi-client network claim.",
+    "sourceSha256": {
+      "src/server/ProfileStore.luau": "ebe195607a9a6ee701344f353008ceddbbab9b833a6470f2e6ee84286648dfb4",
+      "src/server/TowerRules.luau": "961f54d591457b9d151382f0c0744c5cfd1ae5a212a4cd498b85c78b0e0d0733"
+    },
+    "harness": "server-tests.luau",
+    "harnessSha256": "e36fc19a829cef428edf1793ddc80aee6397d17518b413ba0229c9d33581115f",
+    "sourceFunctionsVerified": true,
+    "details": "SERVER_RULES_PASS 52"
   },
   "clientCarry": {
     "passed": true,
     "checks": 35,
-    "clientSha256": "2237b2a847f92fc845590aa0ff4a4bcbcabf6e5e3aa316baad85937e950a7684",
+    "clientSha256": "dfa4c46d4bebbb6a7c3fdd33171899a0df964089e8c79a77a92eeadbc5143855",
     "carryBlockSha256": "2496f866e7a8ac77a104957f208c5d9f84ba6f5b6d2443185069aef7d98e9c8f",
     "harnessSha256": "245d971dac67e4037a2e28c2643d30621bcb1c318af6b1be3cfc1848c9cd5b2c",
     "sourceFunctionsVerified": true,
@@ -321,9 +574,597 @@
     "stdout": "PASS center contact carries actual platform delta\nPASS legitimate root-over-edge footprint still rides\nPASS diagonal footprint probe preserves real corner contact\nPASS outside0.8footprint cannot attach\nPASS diagonal outsidefootprint cannot attach\nPASS walking beyond previous edge releases carrier\nPASS Jump flag detaches before transport\nPASS Jumping state detaches before transport\nPASS upward airborne velocity detaches\nPASS downward airborne velocity detaches\nPASS pending Updraft request prevents stale-floor carry\nPASS approved impulse guard prevents stale-floor carry\nPASS finished racer cannot be transported\nPASS forfeited racer cannot be transported\nPASS lobby phase cannot be transported\nPASS dead racer cannot be transported\nPASS anchored countdown avatar cannot be transported\nPASS disappeared noncollidable floor cannot carry\nPASS unanchored objects cannot grant course carry\nPASS oversized authored travel is rejected\nPASS replicated single-step delta over8studs is rejected\nPASS step cannot exceed configured total travel\nPASS stationary dwell creates no artificial avatar movement\nPASS 6x6shuttle carries whole18studjourney without doubledelta\nPASS carrier preserves player-controlled movement across journey\nPASS oversized avatar retains0.8radiuscap\nPASS teleport detaches instead of dragging avatar back\nPASS non-floor ray normal cannot grant carry\nPASS buried feet below0.55tolerance cannot grant carry\nPASS loss of previous vertical contact detaches\nPASS R6 leg height participates in actual feet distance\nPASS R6 actual longer leg determines support height\nPASS a different shuttle at proposed landing cannot authorize original delta\nPASS static blocker on proposed contact cannot authorize carry\nPASS replacement avatar cannot inherit old character support\nTOTAL 35\n",
     "stderr": ""
   },
+  "clientReadiness": {
+    "checks": 18,
+    "passed": true,
+    "clientSha256": "dfa4c46d4bebbb6a7c3fdd33171899a0df964089e8c79a77a92eeadbc5143855",
+    "harnessSha256": "b0327ee41e7183cc25cfc8208d17bf701bb1995488ce463a3a5a518f4a51fea6",
+    "sourceFunctionsVerified": true,
+    "details": "PASS 18 client readiness and ranking checks",
+    "nativeUiTested": false
+  },
+  "conversation": {
+    "exit_code": 0,
+    "passed": true,
+    "checks": 68,
+    "stdout": "PASS 68 client dialogue and lifecycle checks\n",
+    "stderr": "",
+    "source": "src/client/DasherClient.client.luau",
+    "sourceSHA256": "dfa4c46d4bebbb6a7c3fdd33171899a0df964089e8c79a77a92eeadbc5143855",
+    "harnessSHA256": "ba03a19eada968537a1b0e5f4293d1e986b55e277640c06087a0309b60591484"
+  },
+  "mapGeometry": {
+    "passed": true,
+    "test_methods": 6,
+    "main_and_alternate_avatar_corridors": 339,
+    "world_sha256": "9928c63a5e60f482eb700050b4962f5a8c073606ea0c2c8660725ae6000d636b",
+    "tests_sha256": "30ad7d065774fc2ae840b99f6a1c0d1f85886a34424ddf860a244fd2e78c203e",
+    "parts": {
+      "Helix": 554,
+      "Canopy": 554,
+      "Reactor": 554
+    },
+    "lobby_parts": 1028,
+    "scope": "Generated geometry, ballistic capsule sweeps and finish geometry only; not native Studio results.",
+    "visual_revision": {
+      "removed_parts_per_map": 416,
+      "removed_colliding_wall_panels_per_map": 192,
+      "gameplay_metadata_unchanged": true,
+      "unchanged_fields": [
+        "route",
+        "alternates",
+        "catch_ledges",
+        "obstacles",
+        "gates",
+        "transitions",
+        "finish",
+        "finish_walk_target",
+        "movers",
+        "timed_platforms",
+        "bounds"
+      ],
+      "orphan_parts_removed": {
+        "Helix": 27,
+        "Canopy": 187,
+        "Reactor": 59
+      },
+      "attached_platform_fascia_added_per_map": 108,
+      "orphan_geometry_absent": true
+    },
+    "courses": {
+      "Helix": {
+        "normal_gap_min": 4.295,
+        "normal_gap_max": 8.2,
+        "required_updrafts": 8,
+        "beam_bypasses": 10,
+        "finish_walk_target": [
+          0.0,
+          232.2,
+          -28.5
+        ],
+        "finish_size": [
+          11,
+          7,
+          4
+        ],
+        "finish_pad_size": [
+          12,
+          0.2,
+          5
+        ]
+      },
+      "Canopy": {
+        "normal_gap_min": 4.243,
+        "normal_gap_max": 8.6,
+        "required_updrafts": 8,
+        "beam_bypasses": 10,
+        "finish_walk_target": [
+          0.0,
+          232.2,
+          -28.5
+        ],
+        "finish_size": [
+          11,
+          7,
+          4
+        ],
+        "finish_pad_size": [
+          12,
+          0.2,
+          5
+        ]
+      },
+      "Reactor": {
+        "normal_gap_min": 4.5,
+        "normal_gap_max": 8.6,
+        "required_updrafts": 8,
+        "beam_bypasses": 4,
+        "finish_walk_target": [
+          0.0,
+          232.2,
+          -28.5
+        ],
+        "finish_size": [
+          11,
+          7,
+          4
+        ],
+        "finish_pad_size": [
+          12,
+          0.2,
+          5
+        ]
+      }
+    },
+    "unittest_output": "test_every_authored_branch_has_an_avatar_corridor (test_route_clearance.RouteClearanceTests.test_every_authored_branch_has_an_avatar_corridor) ... ok\ntest_native_p022_head_bump_uses_clear_departure_lane (test_route_clearance.RouteClearanceTests.test_native_p022_head_bump_uses_clear_departure_lane) ... ok\ntest_normal_jumps_have_real_gaps_without_exhausting_flight_range (test_route_clearance.RouteClearanceTests.test_normal_jumps_have_real_gaps_without_exhausting_flight_range) ... ok\ntest_old_shuttle_overhang_is_rejected_even_if_its_center_is_clear (test_route_clearance.RouteClearanceTests.test_old_shuttle_overhang_is_rejected_even_if_its_center_is_clear) ... ok\ntest_open_towers_have_no_enclosing_walls_or_colliding_decoration (test_route_clearance.RouteClearanceTests.test_open_towers_have_no_enclosing_walls_or_colliding_decoration) ... ok\ntest_visible_finish_is_beyond_final_platform_and_arrival_apron (test_route_clearance.RouteClearanceTests.test_visible_finish_is_beyond_final_platform_and_arrival_apron) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.793s\n\nOK\n"
+  },
+  "camera": {
+    "passed": true,
+    "checks": 54,
+    "clientSha256": "dfa4c46d4bebbb6a7c3fdd33171899a0df964089e8c79a77a92eeadbc5143855",
+    "harnessSha256": "9e167589fae14e5fc30f97d36efb120e811209e0756e5c96018dc4c7a827e810",
+    "scope": "Actual shipped planner and guard with deterministic queryable/nonquery rotated-box mocks. Real three-map geometry and native presentation are separate."
+  },
+  "cameraGeometry": {
+    "passed": true,
+    "lens_radius": 0.85,
+    "conservative": "Visible oriented boxes expanded by the lens radius. Includes CanQuery=false decoration.",
+    "source_sha256": "dfa4c46d4bebbb6a7c3fdd33171899a0df964089e8c79a77a92eeadbc5143855",
+    "validation_sha256": "4028bf609d85100728ef206011e8206a8523fedc5840e85565de97a7e7dcbe20",
+    "world_sha256": "9928c63a5e60f482eb700050b4962f5a8c073606ea0c2c8660725ae6000d636b",
+    "courses": {
+      "Helix": {
+        "visible_parts": 530,
+        "nonquery_visible_parts": 421,
+        "old_outside_radius": 116.82465493208187,
+        "old_wall_blocked_samples": 0,
+        "old_sample_count": 49,
+        "variants": [
+          {
+            "side": 1,
+            "clear": true,
+            "from_position": [
+              -20.0,
+              44.0,
+              -26.0
+            ],
+            "to_position": [
+              -12.0,
+              37.0,
+              -18.0
+            ],
+            "problems": []
+          },
+          {
+            "side": -1,
+            "clear": true,
+            "from_position": [
+              20.0,
+              44.0,
+              -26.0
+            ],
+            "to_position": [
+              12.0,
+              37.0,
+              -18.0
+            ],
+            "problems": []
+          },
+          {
+            "side": 0,
+            "clear": true,
+            "from_position": [
+              0.0,
+              44.0,
+              -26.0
+            ],
+            "to_position": [
+              0.0,
+              37.0,
+              -18.0
+            ],
+            "problems": []
+          }
+        ],
+        "selected_side": 1,
+        "handoffs": [
+          {
+            "spawn": [
+              -8,
+              26,
+              -4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              -4,
+              26,
+              -4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              0,
+              26,
+              -4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              4,
+              26,
+              -4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              8,
+              26,
+              -4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              -8,
+              26,
+              4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              -4,
+              26,
+              4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              0,
+              26,
+              4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              4,
+              26,
+              4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              8,
+              26,
+              4
+            ],
+            "clear": true,
+            "problems": []
+          }
+        ],
+        "old_path_diagnostic_only": true,
+        "passed": true
+      },
+      "Canopy": {
+        "visible_parts": 530,
+        "nonquery_visible_parts": 421,
+        "old_outside_radius": 116.82465493208187,
+        "old_wall_blocked_samples": 0,
+        "old_sample_count": 49,
+        "variants": [
+          {
+            "side": 1,
+            "clear": true,
+            "from_position": [
+              8.014066132288667,
+              44.0,
+              -31.808406813723067
+            ],
+            "to_position": [
+              6.692158316653424,
+              37.0,
+              -20.57219038082349
+            ],
+            "problems": []
+          },
+          {
+            "side": -1,
+            "clear": true,
+            "from_position": [
+              32.799837675449496,
+              44.0,
+              -0.41309619238601414
+            ],
+            "to_position": [
+              21.56362124254992,
+              37.0,
+              -1.73500400802126
+            ],
+            "problems": []
+          },
+          {
+            "side": 0,
+            "clear": true,
+            "from_position": [
+              20.406951903869082,
+              44.0,
+              -16.11075150305454
+            ],
+            "to_position": [
+              14.127889779601674,
+              37.0,
+              -11.153597194422375
+            ],
+            "problems": []
+          }
+        ],
+        "selected_side": 1,
+        "handoffs": [
+          {
+            "spawn": [
+              -8,
+              26,
+              -4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              -4,
+              26,
+              -4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              0,
+              26,
+              -4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              4,
+              26,
+              -4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              8,
+              26,
+              -4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              -8,
+              26,
+              4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              -4,
+              26,
+              4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              0,
+              26,
+              4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              4,
+              26,
+              4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              8,
+              26,
+              4
+            ],
+            "clear": true,
+            "problems": []
+          }
+        ],
+        "old_path_diagnostic_only": true,
+        "passed": true
+      },
+      "Reactor": {
+        "visible_parts": 530,
+        "nonquery_visible_parts": 421,
+        "old_outside_radius": 116.82465493208187,
+        "old_wall_blocked_samples": 0,
+        "old_sample_count": 49,
+        "variants": [
+          {
+            "side": 1,
+            "clear": true,
+            "from_position": [
+              20.0,
+              44.0,
+              26.0
+            ],
+            "to_position": [
+              12.0,
+              37.0,
+              18.0
+            ],
+            "problems": []
+          },
+          {
+            "side": -1,
+            "clear": true,
+            "from_position": [
+              -20.0,
+              44.0,
+              26.0
+            ],
+            "to_position": [
+              -12.0,
+              37.0,
+              18.0
+            ],
+            "problems": []
+          },
+          {
+            "side": 0,
+            "clear": true,
+            "from_position": [
+              0.0,
+              44.0,
+              26.0
+            ],
+            "to_position": [
+              0.0,
+              37.0,
+              18.0
+            ],
+            "problems": []
+          }
+        ],
+        "selected_side": 1,
+        "handoffs": [
+          {
+            "spawn": [
+              -8,
+              26,
+              -4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              -4,
+              26,
+              -4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              0,
+              26,
+              -4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              4,
+              26,
+              -4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              8,
+              26,
+              -4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              -8,
+              26,
+              4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              -4,
+              26,
+              4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              0,
+              26,
+              4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              4,
+              26,
+              4
+            ],
+            "clear": true,
+            "problems": []
+          },
+          {
+            "spawn": [
+              8,
+              26,
+              4
+            ],
+            "clear": true,
+            "problems": []
+          }
+        ],
+        "old_path_diagnostic_only": true,
+        "passed": true
+      }
+    }
+  },
   "limitations": [
     "No real ten-client load test",
-    "No live publication or real Robux purchase",
-    "No real mobile device or unusual avatar bundle test"
+    "No real mobile/controller hardware or unusual avatar bundle test",
+    "Local release only; publication and live experience configuration are left to the user"
   ]
 }

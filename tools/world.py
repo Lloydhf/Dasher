@@ -1,4 +1,4 @@
-"""Dasher Ascent: eight obstacle sectors, timed steps and rideable shuttles.
+"""Dasher Ascent: open-air towers with honest jump gaps.
 
 build_world() returns Roblox XML instances for Workspace/Lobby and
 ServerStorage/Maps. COURSE_METADATA exposes the intended traversable routes.
@@ -138,12 +138,12 @@ def beam(parent, name, a, b, width, rgb, material='metal'):
 
 
 THEMES={
- 'Helix':dict(title='HELIX',base=(47,54,80),accent=(142,181,255),surface=(223,231,249),colors=[(116,148,229),(157,117,227),(86,189,219),(230,164,96),(133,193,143),(212,116,158),(122,168,236),(200,179,237)]),
- 'Canopy':dict(title='CANOPY',base=(69,85,66),accent=(183,236,130),surface=(233,228,198),colors=[(145,195,106),(92,180,143),(214,182,104),(147,175,93),(108,193,117),(217,163,109),(108,175,168),(190,206,118)]),
- 'Reactor':dict(title='REACTOR',base=(47,58,70),accent=(99,225,236),surface=(218,230,232),colors=[(100,157,204),(95,194,202),(226,149,74),(165,132,208),(199,108,118),(98,180,211),(181,198,99),(160,190,212)]),
+ 'Helix':dict(title='HELIX',base=(45,54,76),accent=(155,191,255),surface=(217,229,248),colors=[(117,158,224),(151,138,223),(126,175,235),(155,155,230),(110,159,224),(154,136,220),(122,169,232),(166,164,231)]),
+ 'Canopy':dict(title='CANOPY',base=(54,77,67),accent=(167,224,172),surface=(222,231,208),colors=[(125,176,137),(100,176,148),(173,186,129),(133,177,140),(102,173,140),(179,179,126),(114,178,155),(158,191,146)]),
+ 'Reactor':dict(title='REACTOR',base=(42,61,72),accent=(100,224,235),surface=(204,222,229),colors=[(105,161,185),(90,181,190),(111,167,188),(109,183,199),(99,157,181),(106,184,198),(114,166,191),(123,192,201)]),
 }
 SECTOR_TYPES=('precision','angle_beams','shuttle','blink','wall_ledge','shuttle','blink','crown_steps')
-SECTOR_NAMES=('SPLIT STEPS','CROSSBEAMS','TRANSFER','PHASE SHIFT','SKYLINE','CROSSING','TEMPO','FINAL ASCENT')
+SECTOR_NAMES=('SPLIT STEPS','ZIGZAG','TRANSFER','PHASE SHIFT','WALL WALK','CROSSING','TEMPO','FINAL ASCENT')
 GRAVITY, WALK_SPEED, JUMP_SPEED, UPDRAFT_SPEED = 196.2, 20, 52, 88
 
 
@@ -355,19 +355,21 @@ def authored_sector(theme,sector,quarter):
     kind=SECTOR_TYPES[sector-1]
     points,pre,post=template(theme,kind)
     if theme=='Canopy' and sector==1:points[0]=(15,19)
+    if kind=='wall_ledge':points[0]=(points[0][0],points[0][1]+1)
     base=22+(sector-1)*26
     heights=(1.5,3.5,5,19,20.5,22,24,26)
     route=[];alts=[]
     for step,((px,pz),height) in enumerate(zip(points,heights),1):
         x,z=rotate(px,pz,quarter)
-        w=d=5.5 if step==1 else 5
+        w=d=5 if step==1 else 4.8
         padkind='precision'
-        if step in (6,7):w=d=6
+        if step in (6,7):w=d=5.6
+        if theme=='Reactor' and step==6:w=d=6.2
         if kind=='angle_beams' and step in (2,6):w,d,padkind=7,3.2,'balance'
         if kind=='wall_ledge' and step in (1,5):w,d,padkind=4,10,'wall_ledge'
         if kind=='wall_ledge' and theme=='Reactor' and step==5:w=5
         if kind=='crown_steps' and step in (1,2,5):w=d=4.8
-        if step==3:w=d=10;padkind='updraft_launch'
+        if step==3:w=d=9.2;padkind='updraft_launch'
         if step==4:w=d=10;padkind='updraft_receiver'
         if step==8:w=d=14;padkind='sector_rest'
         if kind=='shuttle' and step==2:w=d=6;padkind='shuttle'
@@ -389,6 +391,11 @@ def authored_sector(theme,sector,quarter):
         p=dict(name=f'B{sector:02d}_{position:02d}',index=200+sector*10+position,x=x,z=z,top=base+height,width=w,depth=w,
                yaw=-quarter*90,section=sector,completed_stage=sector-1,updraft=False,kind='shortcut',sector_type=kind,
                branch='alternate',branch_phase='before_lift' if before else 'after_lift')
+        # The optional wall-walk sectors trade generous islands for long,
+        # narrow angled beams. Keeping their centres preserves route choice,
+        # while the different support face changes the actual skill required.
+        if kind in ('angle_beams','wall_ledge') and (theme!='Reactor' or before):
+            p.update(width=7.8,depth=2.8,yaw=-quarter*90+(25 if position%2 else -25),kind='balance_shortcut')
         alts.append(p)
     return route,alts
 
@@ -404,7 +411,7 @@ def course_routes(theme):
     preferences={'Helix':(0,1,2,3,0,0,2,3),'Canopy':(1,2,3,0,1,2,3,0),'Reactor':(2,3,0,1,2,3,0,1)}[theme]
     def choose(sector,route,alternates,branch_data):
         if sector==9:
-            for cx,cz in ((0,-21),(-21,0),(0,21),(21,0)):
+            for cx,cz in ((0,-23),(-23,0),(0,23),(23,0)):
                 crown=dict(name='CrownDeck',index=65,x=cx,z=cz,top=232,width=24,depth=20,yaw=0,section=8,completed_stage=8,updraft=False,kind='crown',branch='shared')
                 if transitions_valid([route[-1],crown]) and clear_headroom(route[-8:]+alternates[-5:]+[crown]):
                     return route+[crown],alternates,branch_data
@@ -452,14 +459,19 @@ def recovery_ledges(route,alternates):
 def platform(parent,p,theme,*,catch=False):
     t=THEMES[theme];model=item('Model',p['name'],parent)
     x,z,y,w,d,yaw=p['x'],p['z'],p['top'],p['width'],p['depth'],p.get('yaw',0)
-    tone=t['colors'][max(0,p['section']-1)]
+    sector_tone=t['colors'][max(0,p['section']-1)]
+    tone=tuple(round(c*.32+s*.68) for c,s in zip(sector_tone,t['surface']))
     if p['kind'] in ('launch','sector_rest','crown'):tone=t['surface']
-    if p['kind']=='shortcut':tone=tuple(min(255,int(c*.78+42)) for c in tone)
+    if p.get('branch')=='alternate':tone=tuple(min(255,int(c*.78+42)) for c in tone)
     if catch:tone=tuple(int(c*.65+255*.35) for c in tone)
     walkable=part(model,'Walkable',(x,y-.625,z),(w,1.25,d),tone,collide=True,yaw=yaw)
     value(walkable,'IntValue','CompletedStage',p['completed_stage'])
+    # A slim attached fascia carries the theme colour; no detached ornaments.
+    angle=math.radians(yaw);edge=d/2+.012
+    part(model,'EdgeTrim',(x+math.sin(angle)*edge,y-.4,z+math.cos(angle)*edge),
+         (max(.5,w-.6),.12,.035),sector_tone,yaw=yaw)
     part(model,'Underside',(x,y-1.42,z),(max(.5,w-.35),.35,max(.5,d-.35)),t['base'],yaw=yaw)
-    if p['kind']=='shortcut':
+    if p.get('branch')=='alternate':
         part(model,'RiskStripe',(x,y+.025,z),(min(1.2,w-1),.05,min(1.2,d-1)),(255,227,144),yaw=45-quarter_yaw(p))
     if p['kind'] in ('updraft_launch','updraft_receiver'):
         part(model,'UpdraftInset',(x,y+.035,z),(3,.07,3),t['accent'],yaw=45)
@@ -522,34 +534,12 @@ def add_obstacles(props,hazards,route,alternates,theme):
 
 
 def architecture(parent,route,theme):
-    t=THEMES[theme]
-    if theme=='Helix':
-        for n,y in enumerate((21,73,125,177,239)):
-            circle_ring(parent,'OrbitalFrame',(0,y,0),58,.7,(123,145,190),segments=16,start=.4+n*.5,end=4.0+n*.5)
-            for side in (-1,1):part(parent,'Satellite',(side*57,y+3,0),(3,5,3),t['accent'],material='glass',transparency=.3,yaw=35)
-        for x,z in ((-57,-31),(57,31)):part(parent,'OuterPier',(x,129,z),(1.8,232,1.8),(117,140,184))
-    elif theme=='Canopy':
-        for x,z in ((53,48),(-55,-46),(52,-50)):
-            part(parent,'LivingTrunk',(x,120,z),(4.5,228,4.5),(111,89,62))
-            for y in (37,89,141,193,239):
-                beam(parent,'Branch',(x,y,z),(x*.78,y+7,z*.78),1.8,(129,110,73),'smooth')
-                part(parent,'LeafCanopy',(x,y+9,z),(18,6,20),(112,160,91),shape=0)
-                for offset in (-4,4):beam(parent,'HangingVine',(x+offset,y+6,z),(x+offset,y-8,z),.22,(134,172,83),'smooth')
-        for p in route:
-            if p['kind'] in ('sector_rest','updraft_launch'):
-                for side in (-1,1):part(parent,'WoodSupport',(p['x']+side*3,p['top']-2.3,p['z']),(1.1,3,1.1),(134,106,73))
-    else:
-        for x,z in ((57,40),(-57,-40),(-57,40)):
-            part(parent,'CoolingSpine',(x,122,z),(3.5,232,3.5),(83,113,131),material='metal')
-            for y in (22,74,126,178,238):
-                part(parent,'SpineClamp',(x,y,z),(6.5,1.2,6.5),t['base'],material='metal')
-                part(parent,'StatusLamp',(x,y+2,z),(3.6,.35,3.6),t['accent'],material='neon')
-        for y in (22,126,238):circle_ring(parent,'ReactorFrame',(0,y,0),61,.5,t['base'],segments=12,material='metal')
-    for p in route:
-        if p['kind']=='wall_ledge':
-            a=math.radians(p.get('yaw',0));off=p['width']/2+1.7
-            part(parent,'LedgeWall',(p['x']+math.cos(a)*off,p['top']+2.7,p['z']-math.sin(a)*off),
-                 (.8,7,p['depth']+2),t['base'],yaw=p.get('yaw',0))
+    """Keep the play space free of detached walls, lights, foliage and pools.
+
+    Theme identity lives on the actual platform models. Functional Updraft
+    guides, shuttle rails, spawn marks and the finish arch are built separately.
+    """
+    return
 
 
 def build_course(theme):
@@ -576,22 +566,33 @@ def build_course(theme):
     for p in recovery:platform(catches,p,theme,catch=True)
     obstacles=add_obstacles(props,hazards,route,alternates,theme)
     first=route[1];yaw=math.degrees(math.atan2(-first['x'],-first['z']))
-    crown=route[-1];finish=(crown['x'],crown['top']+5,crown['z'])
+    crown=route[-1]
+    radial=math.hypot(crown['x'],crown['z']);ux,uz=crown['x']/radial,crown['z']/radial
+    finish_y=crown['top']+.2
+    fx,fz=crown['x']+ux*5.5,crown['z']+uz*5.5
+    finish=(fx,finish_y+3.5,fz);finish_yaw=math.degrees(math.atan2(-ux,-uz))
     part(root,'Start',(0,26,0),(4,1,4),t['accent'],transparency=1,yaw=yaw)
     for i,(x,z) in enumerate(( (x,z) for z in (-4,4) for x in (-8,-4,0,4,8)),1):
         part(root,f'Start{i:02d}',(x,26,z),(1,1,1),t['accent'],transparency=1,yaw=yaw)
         part(props,'StartMark',(x,22.025,z),(.8,.05,.8),t['base'],yaw=45)
-    part(root,'Finish',finish,(24,12,20),t['accent'],transparency=1,touch=True)
+    part(root,'FinishPad',(fx,finish_y-.1,fz),(12,.2,5),t['accent'],collide=True,yaw=finish_yaw)
+    part(root,'Finish',finish,(11,7,4),t['accent'],transparency=1,touch=True,yaw=finish_yaw)
     part(root,'Bounds',(0,131,0),(152,286,152),t['accent'],transparency=1)
     part(hazards,'KillFloor',(0,-12,0),(152,2,152),(167,193,207),transparency=1,touch=True)
     architecture(props,route,theme)
-    # An unmistakable finish plaza. Trigger covers the whole crown so touching
-    # a hidden point is never required; the visible arch is only presentation.
-    for x in (-12.6,12.6):part(props,'FinishPost',(crown['x']+x,237,crown['z']+8),(.8,10,.8),t['base'])
-    part(props,'FinishLintel',(crown['x'],242,crown['z']+8),(26,.8,1),t['accent'])
-    sign(props,'FinishWord','FINISH',(crown['x'],242,crown['z']+8.6),(16,2.4,.15),bg=t['base'],fg=t['surface'],title=True)
-    for xx in range(-5,6):
-        part(props,'FinishCheck',(crown['x']+xx*2,232.045,crown['z']),(1.95,.09,2),t['base'] if xx%2 else t['surface'])
+    # The goal is beyond the landing apron. The checker pad, arch, and exact
+    # server sensor agree; touching the final approach platform cannot win.
+    px,pz=-uz,ux
+    for side in (-1,1):
+        part(props,'FinishPost',(fx+px*side*6.6,finish_y+5,fz+pz*side*6.6),(.7,10,.7),t['base'])
+    part(props,'FinishLintel',(fx,finish_y+10,fz),(14,.7,.8),t['accent'],yaw=finish_yaw)
+    sign(props,'FinishWord','FINISH',(fx-ux*.5,finish_y+10,fz-uz*.5),(11,1.8,.12),
+         bg=t['base'],fg=t['surface'],title=True,yaw=finish_yaw)
+    for xx in range(-3,3):
+        for zz in range(2):
+            cross,forward=xx*2+1,zz*2-1
+            part(props,'FinishCheck',(fx+px*cross+ux*forward,finish_y+.025,fz+pz*cross+uz*forward),
+                 (1.96,.05,1.96),t['base'] if (xx+zz)%2 else t['surface'],yaw=finish_yaw)
     by_name={p['name']:p for p in route+alternates}
     edges=[transition_metrics(a,b) for a,b in zip(route,route[1:])]
     all_surfaces=route+alternates+recovery
@@ -602,13 +603,14 @@ def build_course(theme):
             alternative['transitions']=[dict(transition_metrics(a,b),**approach_points(a,b,obstacles=all_surfaces)) for a,b in zip(chain,chain[1:])]
     COURSE_METADATA[theme]=dict(primary=route,route=route,alternates=alternates,branches=branches,catch_ledges=recovery,obstacles=obstacles,
         gates=[dict(name=f'Gate{p["section"]:02d}',height=p['top']+2,center=(p['x'],p['top']+2,p['z']),size=(14,6,14),landing=p['name']) for p in route if p['kind']=='sector_rest'],
-        start=(0,26,0),finish=finish,finish_surface=232,course_height_studs=210,
+        start=(0,26,0),finish=finish,finish_surface=finish_y,finish_walk_target=(fx,finish_y,fz),
+        finish_size=(11,7,4),finish_pad_size=(12,.2,5),finish_yaw=finish_yaw,course_height_studs=210,
         required_updrafts=[p['name'] for p in route if p['updraft']],
         movers=[p for p in route if p.get('motion')=='Shuttle'],timed_platforms=[p for p in route if p.get('motion')=='Blink'],
         transitions=edges,bounds=dict(center=(0,131,0),size=(152,286,152)),
         difficulty=dict(normal_gap_min=round(min(p['gap'] for p in edges if not p['updraft']),3),normal_gap_max=round(max(p['gap'] for p in edges if not p['updraft']),3),
                         mandatory_lift_rise=14,alternate_routes=sum(len(b['alternatives']) for b in branches),physics=dict(gravity=GRAVITY,walk_speed=WALK_SPEED,jump_speed=JUMP_SPEED,updraft_speed=UPDRAFT_SPEED)),
-        description='Eight demanding tower sectors with independent precision bypasses, route choice, 14-stud Updraft climbs, moving shuttles, timed steps and recoverable falls.')
+        description='Eight open-air tower sectors with clear jump gaps, angled beam bypasses, 14-stud Updraft climbs, moving shuttles, timed steps, recoverable falls, and a physical summit finish pad.')
     return root
 
 
@@ -662,7 +664,7 @@ def verify_geometry():
             assert 0<=p['completed_stage']<=8
         model=next(m for m in maps.findall('Item') if m.find("Properties/string[@name='Name']").text==theme)
         counts[theme]=sum(1 for n in model.iter('Item') if n.attrib['class']=='Part')
-        assert counts[theme]<1000
+        assert counts[theme]<1300
         assert not any(n.attrib['class'] in ('Script','LocalScript','ModuleScript') for n in model.iter('Item'))
     refs=[n.attrib['referent'] for root in (lobby,maps) for n in root.iter('Item')]
     assert len(refs)==len(set(refs))

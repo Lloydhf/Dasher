@@ -7,16 +7,6 @@ function TowerRules.Altitude(y, baseY, finishY, previousPeak)
 	return current, math.max(previousPeak or 0, current), height, current / height
 end
 
-function TowerRules.BallisticCeiling(originY, launchSpeed, elapsed, gravity, latency)
-	-- Replicated physics can arrive late or in bursts. Take the highest legitimate
-	-- point in a bounded time window, rather than granting infinite airtime credit.
-	local g = math.max(1, gravity)
-	local early = math.max(0, elapsed - latency)
-	local late = math.max(early, elapsed + latency)
-	local apex = math.clamp(launchSpeed / g, early, late)
-	return originY + launchSpeed * apex - 0.5 * g * apex * apex + 7
-end
-
 function TowerRules.UpdraftReady(timestamp, lastUse, airborneUsed, groundedSince, cooldown, groundTime)
 	if timestamp - lastUse < cooldown then
 		return false
@@ -46,10 +36,11 @@ function TowerRules.GroundContact(distance, feetDistance, normalY, verticalSpeed
 		and distance >= feetDistance - 0.55 and distance <= feetDistance + 0.55
 end
 
-function TowerRules.HorizontalBudget(credit, dt, speed)
-	-- Only walking refills this bucket; verified platform displacement is excluded.
-	local walkingCap = 32 + speed * math.max(0, dt - 0.4)
-	return math.min(walkingCap, credit + speed * 1.28 * dt)
+function TowerRules.FinishContact(localX, localY, localZ, sizeX, sizeY, sizeZ, supported)
+	-- The root centre must enter the marked pad's exact prism while its feet
+	-- actually rest on that pad. No swept path, avatar padding or contact below.
+	return supported and math.abs(localX) <= sizeX * 0.5
+		and math.abs(localY) <= sizeY * 0.5 and math.abs(localZ) <= sizeZ * 0.5
 end
 
 function TowerRules.ShuttleAlpha(elapsed, period, dwell)

@@ -1,19 +1,24 @@
-# Repeatable Ascent 0.5 checks
+# Repeatable Ascent 0.7 checks
 
-Use Python 3 and the Luau CLI. Put `luau` on `PATH`, or set `LUAU_BIN` to its executable. No Roblox account or player data is required for these checks.
-
-Run from the repository root:
+Use Python 3 and the Luau CLI. Put `luau` and `luau-compile` on PATH, or set `LUAU_BIN` and `LUAU_COMPILE_BIN` to their executables. Run from the repository root:
 
 ```text
 python -m unittest discover -s tools -p test_route_clearance.py -v
+python tests/movement-regressions.py
 python tests/finish-regressions.py
-python tests/movement-landing-tests.py
 python tests/moving-support-tests.py
 python tests/client-carry-tests.py
+python tests/clock-regressions.py
+python tests/server-tests.py
+python tests/shuttle-latency-replay.py
+python tests/reset_hold_tests.py
+python tests/client_dialogue_tests.py
+python tests/camera-tests.py
+python tests/camera-geometry-validation.py
 ```
 
-The four Python harnesses extract current production functions and run deterministic Luau mocks. They cover 95 finish/lifecycle, 23 movement, 30 moving-support, 35 carry and 18 readiness/ranking checks. The client readiness fixture must match the current client functions before it runs. Generated harnesses and reports are written to the ignored `.test-output/` directory.
+The source-bound suites cover **560 deterministic checks/replays**: movement 41, finish/lifecycle 91, moving support 30, carry 35, readiness 18, clock 86, profile/rules 52, delayed-shuttle poses 7, reset hold 78, dialogue 68 and camera 54. They extract current production functions or load the shipped modules. Fixtures that copy client helpers must match the current source before execution.
 
-The three Python geometry tests cover 339 authored route transitions and two previously observed overhead collisions. These checks complement the dated native Studio evidence in [TESTING.md](../docs/TESTING.md); they do not simulate network replication, a real ten-client load, mobile hardware or human enjoyment.
+The six geometry tests cover 339 authored primary/alternate corridors, with a separate oriented-box audit of camera paths and spawn handoffs. Generated harnesses and reports go into ignored `.test-output/`.
 
-These harnesses were carried forward from the game's local QA work. The GitHub refresh changes their file locations and Luau discovery only, then reruns them against the unchanged release gameplay sources.
+These are the original 0.7 QA harnesses with portable locations and executable discovery. They do not simulate a real ten-client server, physical mobile/controller hardware, live persistence or player enjoyment. [TESTING.md](../docs/TESTING.md) records the separate native Studio evidence and limits.

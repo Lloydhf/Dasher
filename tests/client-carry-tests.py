@@ -2,13 +2,13 @@
 No release source is rewritten. This is not a substitute for networked Studio physics.
 """
 from pathlib import Path
+from test_paths import ROOT, QA, LUAU, LUAU_COMPILE, TESTS
 import hashlib
 import json
 import re
 import subprocess
-from test_paths import ROOT, QA, LUAU
 
-CLIENT = ROOT / "src/client/DasherClient.client.luau"
+CLIENT = ROOT / 'src/client/DasherClient.client.luau'
 source = CLIENT.read_text(encoding="utf-8")
 start = source.index("do\n local support, previousFrame, supportedCharacter")
 end = source.index("\nlocal function applyApprovedVelocity", start)
@@ -218,7 +218,7 @@ result = {
 if not result["passed"]:
     raise SystemExit(completed.returncode or 1)
 
-readiness = Path(__file__).parent / "client-readiness-tests.luau"
+readiness = TESTS / "client-readiness-tests.luau"
 readiness_source = readiness.read_text(encoding="utf-8")
 for first, last in [("local function abilityReadiness(", "\nlocal function tryUpdraft()"), ("local function rankedRacers()", "\nupdateRaceBoard=function()")]:
     assert source[source.index(first):source.index(last)] in readiness_source
